@@ -13,7 +13,9 @@ import {
 	isRejectedAnonymousSession,
 	type YoutubeInnertube,
 } from "./youtube-innertube-session.ts";
+import { withYoutubeClientVersion } from "./youtube-mweb-config.ts";
 import { toYoutubeSabrAdaptiveFormat } from "./youtube-sabr-adaptive-format.ts";
+import { buildYoutubeSabrPlayerRequest } from "./youtube-sabr-player-request.ts";
 import type { YoutubeSabrClient, YoutubeSabrSession } from "./youtube-sabr-types.ts";
 
 const sessionRequests = new KeyedSingleFlight<string, YoutubeSabrSession>();
@@ -21,22 +23,37 @@ const sessionRequests = new KeyedSingleFlight<string, YoutubeSabrSession>();
 export async function fetchYoutubeSabrSession(
 	videoId: string,
 	client: YoutubeSabrClient = "MWEB",
+	reloadPlaybackParamsToken?: string,
 ): Promise<YoutubeSabrSession> {
+	if (reloadPlaybackParamsToken) {
+		return loadYoutubeSabrSession(videoId, client, reloadPlaybackParamsToken);
+	}
 	return sessionRequests.run(`${client}:${videoId}`, () => loadYoutubeSabrSession(videoId, client));
 }
 
 async function loadYoutubeSabrSession(
 	videoId: string,
 	client: YoutubeSabrClient,
+	reloadPlaybackParamsToken?: string,
 ): Promise<YoutubeSabrSession> {
 	const tokens = await fetchPoToken(videoId);
 	let innertube = await getYoutubeInnertube(client, tokens.visitorData);
-	let responses = await fetchYoutubeResponses(videoId, innertube, tokens.visitorBoundPoToken);
+	let responses = await fetchYoutubeResponses(
+		videoId,
+		innertube,
+		tokens.visitorBoundPoToken,
+		reloadPlaybackParamsToken,
+	);
 	const playability = responses.videoInfo.playability_status;
 	if (isRejectedAnonymousSession(playability?.status, playability?.reason)) {
 		await invalidateYoutubeInnertube(client, tokens.visitorData, innertube);
 		innertube = await getYoutubeInnertube(client, tokens.visitorData);
-		responses = await fetchYoutubeResponses(videoId, innertube, tokens.visitorBoundPoToken);
+		responses = await fetchYoutubeResponses(
+			videoId,
+			innertube,
+			tokens.visitorBoundPoToken,
+			reloadPlaybackParamsToken,
+		);
 	}
 	const { videoInfo, nextResponse } = responses;
 	if (videoInfo.playability_status?.status !== "OK") {
@@ -56,24 +73,18 @@ async function fetchYoutubeResponses(
 	videoId: string,
 	innertube: YoutubeInnertube,
 	poToken: string,
+	reloadPlaybackParamsToken?: string,
 ) {
 	const endpoint = new YTNodes.NavigationEndpoint({ watchEndpoint: { videoId } });
 	const nextEndpoint = new YTNodes.NavigationEndpoint({ watchNextEndpoint: { videoId } });
 	const cachedChannelAvatarUrl = getCachedYoutubeChannelAvatar(videoId);
 	const [videoInfo, nextResponse] = await Promise.all([
 		endpoint.call(innertube.actions, {
-			playbackContext: {
-				adPlaybackContext: { pyv: true },
-				contentPlaybackContext: {
-					vis: 0,
-					splay: false,
-					lactMilliseconds: "-1",
-					signatureTimestamp: innertube.session.player?.signature_timestamp,
-				},
-			},
-			serviceIntegrityDimensions: { poToken },
-			contentCheckOk: true,
-			racyCheckOk: true,
+			...buildYoutubeSabrPlayerRequest(
+				innertube.session.player?.signature_timestamp,
+				poToken,
+				reloadPlaybackParamsToken,
+			),
 			parse: true,
 		}),
 		cachedChannelAvatarUrl
@@ -91,9 +102,15 @@ async function buildYoutubeSabrSession(
 	videoInfo: Awaited<ReturnType<YTNodes.NavigationEndpoint["call"]>>,
 	channelAvatarUrl: string,
 ): Promise<YoutubeSabrSession> {
-	const serverAbrStreamingUrl = await innertube.session.player?.decipher(
+	const decipheredServerAbrStreamingUrl = await innertube.session.player?.decipher(
 		videoInfo.streaming_data?.server_abr_streaming_url,
 	);
+	const serverAbrStreamingUrl = decipheredServerAbrStreamingUrl
+		? withYoutubeClientVersion(
+				decipheredServerAbrStreamingUrl,
+				innertube.session.context.client.clientVersion,
+			)
+		: undefined;
 	const videoPlaybackUstreamerConfig =
 		videoInfo.player_config?.media_common_config.media_ustreamer_request_config
 			?.video_playback_ustreamer_config;
