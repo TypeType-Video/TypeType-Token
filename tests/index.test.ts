@@ -14,6 +14,40 @@ const mockFetchPoToken = mock(
 		streamingPot: `video-bound-${videoId}`,
 	}),
 );
+const mockFetchYoutubeSabrSession = mock(
+	async (
+		videoId: string,
+		client = "MWEB",
+		_reloadPlaybackParams?: string,
+	): Promise<YoutubeSabrSession> => ({
+		videoId,
+		client: client === "WEB" ? "WEB" : "MWEB",
+		visitorData: "visitor-data",
+		poToken: "visitor-bound-token",
+		streamingPot: `video-bound-${videoId}`,
+		serverAbrStreamingUrl: "https://example.test/sabr",
+		rawServerAbrStreamingUrl: "https://example.test/raw-sabr",
+		hlsManifestUrl: "https://example.test/live.m3u8",
+		videoPlaybackUstreamerConfig: "ustreamer-config",
+		durationMs: 1000,
+		title: "Test video",
+		metadata: {
+			title: "Test video",
+			author: "Test channel",
+			channelId: "channel-id",
+			channelAvatarUrl: "https://example.test/avatar.jpg",
+			description: "",
+			durationMs: 1000,
+			viewCount: 1,
+			thumbnailUrl: "https://example.test/thumb.jpg",
+			tags: [],
+			isLive: false,
+			isLiveContent: false,
+		},
+		formats: [],
+		adaptiveFormats: [],
+	}),
+);
 
 mock.module("../src/token-service.ts", () => ({
 	fetchPoToken: mockFetchPoToken,
@@ -27,36 +61,7 @@ mock.module("../src/innertube.ts", () => ({
 }));
 
 mock.module("../src/youtube-sabr-session.ts", () => ({
-	fetchYoutubeSabrSession: mock(
-		async (videoId: string, client = "MWEB"): Promise<YoutubeSabrSession> => ({
-			videoId,
-			client: client === "WEB" ? "WEB" : "MWEB",
-			visitorData: "visitor-data",
-			poToken: "visitor-bound-token",
-			streamingPot: `video-bound-${videoId}`,
-			serverAbrStreamingUrl: "https://example.test/sabr",
-			rawServerAbrStreamingUrl: "https://example.test/raw-sabr",
-			hlsManifestUrl: "https://example.test/live.m3u8",
-			videoPlaybackUstreamerConfig: "ustreamer-config",
-			durationMs: 1000,
-			title: "Test video",
-			metadata: {
-				title: "Test video",
-				author: "Test channel",
-				channelId: "channel-id",
-				channelAvatarUrl: "https://example.test/avatar.jpg",
-				description: "",
-				durationMs: 1000,
-				viewCount: 1,
-				thumbnailUrl: "https://example.test/thumb.jpg",
-				tags: [],
-				isLive: false,
-				isLiveContent: false,
-			},
-			formats: [],
-			adaptiveFormats: [],
-		}),
-	),
+	fetchYoutubeSabrSession: mockFetchYoutubeSabrSession,
 }));
 
 mock.module("../src/youtube-player-decoder.ts", () => ({
@@ -181,6 +186,38 @@ describe("handler", () => {
 		expect(body.serverAbrStreamingUrl).toBe("https://example.test/sabr");
 		expect(body.hlsManifestUrl).toBe("https://example.test/live.m3u8");
 		expect(body.videoPlaybackUstreamerConfig).toBe("ustreamer-config");
+	});
+
+	it("POST /youtube/sabr/session/reload keeps the token out of the URL", async () => {
+		const { handler } = await import("../src/index.ts");
+		const res = await handler(
+			new Request("http://localhost:8081/youtube/sabr/session/reload", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					videoId: "abc",
+					client: "MWEB",
+					reloadPlaybackParams: "reload-secret",
+				}),
+			}),
+		);
+
+		expect(res.status).toBe(200);
+		expect(mockFetchYoutubeSabrSession.mock.calls.at(-1)).toEqual(["abc", "MWEB", "reload-secret"]);
+		expect(res.url).not.toContain("reload-secret");
+	});
+
+	it("POST /youtube/sabr/session/reload rejects a missing reload token", async () => {
+		const { handler } = await import("../src/index.ts");
+		const res = await handler(
+			new Request("http://localhost:8081/youtube/sabr/session/reload", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ videoId: "abc" }),
+			}),
+		);
+
+		expect(res.status).toBe(400);
 	});
 
 	it("POST /youtube/player/decoder returns player decode result", async () => {
