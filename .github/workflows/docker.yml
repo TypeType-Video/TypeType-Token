@@ -11,6 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  UPSTREAM_REPOSITORY: TypeType-Video/TypeType
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
@@ -48,11 +49,30 @@ jobs:
 
       - name: Resolve build metadata
         id: build-info
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          base_version="$(bun -e 'console.log(require("./package.json").version)')"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            version="${GITHUB_REF_NAME#v}"
+            base_version="${GITHUB_REF_NAME#v}"
+            if [[ ! "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid component release tag: $GITHUB_REF_NAME"
+              exit 1
+            fi
+            gh api "repos/${UPSTREAM_REPOSITORY}/git/ref/tags/v${base_version}" >/dev/null
+            version="$base_version"
           else
+            upstream_tag="$(gh api "repos/${UPSTREAM_REPOSITORY}/releases/latest" --jq '.tag_name')"
+            if [[ ! "$upstream_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+              echo "Invalid upstream TypeType release tag: $upstream_tag"
+              exit 1
+            fi
+            base_version="${BASH_REMATCH[1]}"
+          fi
+          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+            version="$base_version"
+          elif [[ "$GITHUB_REF_NAME" == "dev" ]]; then
+            version="$base_version-dev.$GITHUB_RUN_NUMBER"
+          elif [[ "$GITHUB_REF" != refs/tags/v* ]]; then
             channel="${GITHUB_REF_NAME//[^0-9A-Za-z-]/-}"
             version="$base_version-$channel.$GITHUB_RUN_NUMBER"
           fi
@@ -80,6 +100,7 @@ jobs:
         with:
           images: ${{ steps.build-info.outputs.image }}
           tags: |
+            type=raw,value=${{ steps.build-info.outputs.version }}
             type=sha,prefix=sha-,format=short
             type=ref,event=branch
             type=ref,event=tag

@@ -13,7 +13,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN bun install --frozen-lockfile --production
 
 FROM mcr.microsoft.com/playwright:v1.61.1-noble AS runner
-ARG BUILD_VERSION=0.1.0
+ARG BUILD_VERSION=1.2.4-dev
 ARG BUILD_REVISION=development
 ARG BUILD_TIME=unknown
 WORKDIR /app
