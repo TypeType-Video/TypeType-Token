@@ -24,8 +24,9 @@ export async function fetchYoutubeSabrSession(
 	videoId: string,
 	client: YoutubeSabrClient = "MWEB",
 	reloadPlaybackParamsToken?: string,
+	isolated = false,
 ): Promise<YoutubeSabrSession> {
-	if (reloadPlaybackParamsToken) {
+	if (reloadPlaybackParamsToken || isolated) {
 		return loadYoutubeSabrSession(videoId, client, reloadPlaybackParamsToken);
 	}
 	return sessionRequests.run(`${client}:${videoId}`, () => loadYoutubeSabrSession(videoId, client));

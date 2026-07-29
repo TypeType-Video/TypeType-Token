@@ -74,7 +74,12 @@ export async function handler(
 		}
 
 		try {
-			const result = await fetchYoutubeSabrSession(videoId, clientParam as YoutubeSabrClient);
+			const result = await fetchYoutubeSabrSession(
+				videoId,
+				clientParam as YoutubeSabrClient,
+				undefined,
+				url.searchParams.get("isolated") === "true",
+			);
 			return Response.json(result);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Internal error";

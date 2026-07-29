@@ -19,6 +19,7 @@ const mockFetchYoutubeSabrSession = mock(
 		videoId: string,
 		client = "MWEB",
 		_reloadPlaybackParams?: string,
+		_isolated = false,
 	): Promise<YoutubeSabrSession> => ({
 		videoId,
 		client: client === "WEB" ? "WEB" : "MWEB",
@@ -186,6 +187,16 @@ describe("handler", () => {
 		expect(body.serverAbrStreamingUrl).toBe("https://example.test/sabr");
 		expect(body.hlsManifestUrl).toBe("https://example.test/live.m3u8");
 		expect(body.videoPlaybackUstreamerConfig).toBe("ustreamer-config");
+	});
+
+	it("GET /youtube/sabr/session forwards isolated requests", async () => {
+		const { handler } = await import("../src/index.ts");
+		const res = await handler(
+			new Request("http://localhost:8081/youtube/sabr/session?videoId=abc&isolated=true"),
+		);
+
+		expect(res.status).toBe(200);
+		expect(mockFetchYoutubeSabrSession.mock.calls.at(-1)).toEqual(["abc", "MWEB", undefined, true]);
 	});
 
 	it("POST /youtube/sabr/session/reload keeps the token out of the URL", async () => {
