@@ -12,10 +12,15 @@ COPY package.json bun.lock ./
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN bun install --frozen-lockfile --production
 
-FROM mcr.microsoft.com/playwright:v1.61.1-noble AS runner
+FROM mcr.microsoft.com/playwright:v1.62.0-noble AS runner
 ARG BUILD_VERSION=1.2.4-dev
 ARG BUILD_REVISION=development
 ARG BUILD_TIME=unknown
+RUN apt-get update \
+	&& DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+	&& apt-get purge -y gstreamer1.0-plugins-bad libgstreamer-plugins-bad1.0-0 \
+	&& apt-get autoremove -y \
+	&& rm -rf /var/lib/apt/lists/* /usr/lib/node_modules
 WORKDIR /app
 COPY --from=oven/bun:1.3.14-slim /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=prod-deps /app/node_modules ./node_modules
