@@ -74,8 +74,42 @@ export async function handler(
 		}
 
 		try {
-			const result = await fetchYoutubeSabrSession(videoId, clientParam as YoutubeSabrClient);
+			const result = await fetchYoutubeSabrSession(
+				videoId,
+				clientParam as YoutubeSabrClient,
+				undefined,
+				url.searchParams.get("isolated") === "true",
+			);
 			return Response.json(result);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Internal error";
+			return Response.json({ error: message }, { status: 500 });
+		}
+	}
+
+	if (req.method === "POST" && url.pathname === "/youtube/sabr/session/reload") {
+		try {
+			const body = (await req.json().catch(() => null)) as {
+				videoId?: unknown;
+				client?: unknown;
+				reloadPlaybackParams?: unknown;
+			} | null;
+			const videoId = typeof body?.videoId === "string" ? body.videoId.trim() : "";
+			const client = body?.client ?? "MWEB";
+			const reloadPlaybackParams =
+				typeof body?.reloadPlaybackParams === "string" ? body.reloadPlaybackParams.trim() : "";
+			if (!videoId || videoId.length > 128) {
+				return Response.json({ error: "videoId is required" }, { status: 400 });
+			}
+			if (client !== "WEB" && client !== "MWEB") {
+				return Response.json({ error: "client must be WEB or MWEB" }, { status: 400 });
+			}
+			if (!reloadPlaybackParams || reloadPlaybackParams.length > 8192) {
+				return Response.json({ error: "reloadPlaybackParams is required" }, { status: 400 });
+			}
+			return Response.json(
+				await fetchYoutubeSabrSession(videoId, client as YoutubeSabrClient, reloadPlaybackParams),
+			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Internal error";
 			return Response.json({ error: message }, { status: 500 });
