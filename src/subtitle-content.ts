@@ -32,24 +32,44 @@ export async function fetchSubtitleContent(
 	fetchYoutube: typeof youtubeFetch = youtubeFetch,
 ): Promise<Uint8Array> {
 	const request = parseSubtitleRequest(rawUrl);
+	try {
+		return await fetchVttContent(
+			refreshedVttUrl(rawUrl, request.translatedLanguageTag),
+			fetchYoutube,
+		);
+	} catch (error) {
+		if (error instanceof SubtitleFetchError && error.code === "subtitle_upstream_throttled") {
+			throw error;
+		}
+	}
+
 	const { visitorData, poToken } = await fetchPoToken(request.videoId);
 	const tracks = await fetchCaptionTracks(request.videoId, visitorData, poToken);
 	const track = selectTrack(tracks, request);
 	if (!track?.baseUrl) {
 		throw new SubtitleFetchError("Subtitle track not found", "subtitle_track_not_found", 404);
 	}
-	const response = await fetchYoutube(
+	return fetchVttContent(
 		refreshedVttUrl(track.baseUrl, request.translatedLanguageTag),
-		{
-			headers: {
-				accept: "text/vtt,*/*;q=0.8",
-				origin: "https://m.youtube.com",
-				referer: "https://m.youtube.com/",
-				"user-agent": MWEB_USER_AGENT,
-				"x-goog-visitor-id": visitorData,
-			},
-		},
+		fetchYoutube,
+		visitorData,
 	);
+}
+
+async function fetchVttContent(
+	url: URL,
+	fetchYoutube: typeof youtubeFetch,
+	visitorData?: string,
+): Promise<Uint8Array> {
+	const response = await fetchYoutube(url, {
+		headers: {
+			accept: "text/vtt,*/*;q=0.8",
+			origin: "https://m.youtube.com",
+			referer: "https://m.youtube.com/",
+			"user-agent": MWEB_USER_AGENT,
+			...(visitorData ? { "x-goog-visitor-id": visitorData } : {}),
+		},
+	});
 	if (response.status === 429) {
 		throw new SubtitleFetchError(
 			"YouTube temporarily throttled subtitle retrieval",

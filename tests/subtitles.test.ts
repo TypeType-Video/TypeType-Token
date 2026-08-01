@@ -114,7 +114,8 @@ describe("fetchSubtitles", () => {
 				vssId: ".fr",
 			},
 		]);
-		mockYoutubeFetch.mockImplementation(
+		mockYoutubeFetch.mockImplementationOnce(async () => new Response("", { status: 403 }));
+		mockYoutubeFetch.mockImplementationOnce(
 			async () => new Response("WEBVTT\n\n00:00.000 --> 00:01.000\nBonjour"),
 		);
 		const { fetchSubtitleContent } = await import("../src/subtitle-content.ts");
@@ -126,6 +127,7 @@ describe("fetchSubtitles", () => {
 		const requestHeaders = new Headers(mockYoutubeFetch.mock.calls.at(-1)?.[1]?.headers);
 
 		expect(new TextDecoder().decode(bytes).startsWith("WEBVTT")).toBe(true);
+		expect(mockYoutubeFetch).toHaveBeenCalledTimes(2);
 		expect(requested.searchParams.get("expire")).toBe("999");
 		expect(requested.searchParams.get("fmt")).toBe("vtt");
 		expect(requested.searchParams.get("tlang")).toBe("es");
@@ -139,7 +141,8 @@ describe("fetchSubtitles", () => {
 			{ ...frTrack, languageCode: "en", vssId: ".en" },
 			asrTrack,
 		]);
-		mockYoutubeFetch.mockImplementation(async () => new Response("WEBVTT\n\nAutomatic"));
+		mockYoutubeFetch.mockImplementationOnce(async () => new Response("", { status: 403 }));
+		mockYoutubeFetch.mockImplementationOnce(async () => new Response("WEBVTT\n\nAutomatic"));
 		const { fetchSubtitleContent } = await import("../src/subtitle-content.ts");
 		await fetchSubtitleContent(
 			"https://www.youtube.com/api/timedtext?v=video&lang=en&kind=asr&expire=1",
@@ -149,6 +152,26 @@ describe("fetchSubtitles", () => {
 
 		expect(requested.searchParams.get("kind")).toBe("asr");
 		expect(requested.searchParams.get("expire")).toBe("999");
+	});
+
+	it("uses a current WEB track without replacing it through MWEB", async () => {
+		mockFetchCaptionTracks.mockClear();
+		mockYoutubeFetch.mockClear();
+		mockYoutubeFetch.mockImplementationOnce(
+			async () => new Response("WEBVTT\n\n00:00.000 --> 00:01.000\nCurrent"),
+		);
+		const { fetchSubtitleContent } = await import("../src/subtitle-content.ts");
+		const bytes = await fetchSubtitleContent(
+			"https://www.youtube.com/api/timedtext?v=video&lang=en&expire=999&fmt=ttml",
+			mockYoutubeFetch,
+		);
+		const requested = new URL(String(mockYoutubeFetch.mock.calls[0]?.[0]));
+
+		expect(new TextDecoder().decode(bytes).startsWith("WEBVTT")).toBe(true);
+		expect(requested.hostname).toBe("www.youtube.com");
+		expect(requested.searchParams.get("fmt")).toBe("vtt");
+		expect(mockFetchCaptionTracks).not.toHaveBeenCalled();
+		expect(mockYoutubeFetch).toHaveBeenCalledTimes(1);
 	});
 
 	it("returns a typed throttling failure without retrying", async () => {
