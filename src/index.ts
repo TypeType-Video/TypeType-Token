@@ -7,7 +7,7 @@ import {
 	createRemoteLoginHandler,
 	type RemoteLoginWebSocketData,
 } from "./remote-login-routes.ts";
-import { fetchSubtitles } from "./subtitles.ts";
+import { handleSubtitleRequest } from "./subtitle-routes.ts";
 import { fetchPoToken } from "./token-service.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
@@ -25,6 +25,8 @@ export async function handler(
 	const url = new URL(req.url);
 	const remoteLoginResponse = await remoteLoginHandler(req, url, server);
 	if (remoteLoginResponse !== null) return remoteLoginResponse;
+	const subtitleResponse = await handleSubtitleRequest(req, url);
+	if (subtitleResponse !== null) return subtitleResponse;
 
 	if (req.method === "GET" && url.pathname === "/potoken") {
 		const videoId = url.searchParams.get("videoId");
@@ -40,22 +42,6 @@ export async function handler(
 				url.searchParams.get("refreshVideo") === "true",
 			);
 			return Response.json(result);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Internal error";
-			return Response.json({ error: message }, { status: 500 });
-		}
-	}
-
-	if (req.method === "GET" && url.pathname === "/subtitles") {
-		const videoId = url.searchParams.get("videoId");
-
-		if (!videoId) {
-			return Response.json({ error: "videoId query parameter is required" }, { status: 400 });
-		}
-
-		try {
-			const tracks = await fetchSubtitles(videoId);
-			return Response.json(tracks);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Internal error";
 			return Response.json({ error: message }, { status: 500 });

@@ -1,5 +1,6 @@
 import type { IntegrityTokenData } from "bgutils-js";
 import { WEB_CLIENT_VERSION } from "./botguard-challenge.ts";
+import { ANDROID_VR_USER_AGENT } from "./youtube-client-profile.ts";
 import { youtubeFetch } from "./youtube-fetch.ts";
 
 const INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
@@ -10,9 +11,6 @@ const USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
 	"Chrome/131.0.0.0 Safari/537.36";
 
-const ANDROID_VR_USER_AGENT =
-	"com.google.android.apps.youtube.vr.oculus/1.65.10 " +
-	"(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
 const ANDROID_VR_CLIENT_VERSION = "1.65.10";
 const ANDROID_VR_CLIENT_NAME_ID = "28";
 
@@ -61,6 +59,7 @@ export type RawCaptionTrack = {
 	name?: { simpleText?: string; runs?: { text?: string }[] };
 	languageCode?: string;
 	kind?: string;
+	vssId?: string;
 };
 
 type PlayerResponse = {
