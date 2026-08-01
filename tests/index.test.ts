@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { RawCaptionTrack } from "../src/innertube.ts";
 import type { SubtitleTrack } from "../src/subtitles.ts";
 import type { TokenResult } from "../src/token-service.ts";
+import type { RawCaptionTrack } from "../src/youtube-caption-tracks.ts";
 import type { YoutubePlayerDecodeResponse } from "../src/youtube-player-decoder.ts";
 import type { YoutubeSabrSession } from "../src/youtube-sabr-session.ts";
 
@@ -55,10 +55,13 @@ mock.module("../src/token-service.ts", () => ({
 }));
 
 mock.module("../src/innertube.ts", () => ({
-	fetchCaptionTracks: mock(async (_videoId: string): Promise<RawCaptionTrack[]> => []),
 	fetchVisitorData: mock(async (): Promise<string> => "visitor-data"),
 	fetchChallenge: mock(async () => ({})),
 	fetchIntegrityToken: mock(async () => ({ integrityToken: "integrity-token" })),
+}));
+
+mock.module("../src/youtube-caption-tracks.ts", () => ({
+	fetchCaptionTracks: mock(async (_videoId: string): Promise<RawCaptionTrack[]> => []),
 }));
 
 mock.module("../src/youtube-sabr-session.ts", () => ({

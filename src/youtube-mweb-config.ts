@@ -4,7 +4,7 @@ export type YoutubeMwebConfig = {
 
 const MWEB_CONFIG_URL = "https://m.youtube.com/sw.js_data";
 const MWEB_REFERER = "https://m.youtube.com/sw.js";
-const MWEB_USER_AGENT =
+export const MWEB_USER_AGENT =
 	"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36";
 
 export async function fetchYoutubeMwebConfig(

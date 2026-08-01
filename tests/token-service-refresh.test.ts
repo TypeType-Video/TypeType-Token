@@ -60,7 +60,6 @@ mock.module("../src/botguard-challenge.ts", () => ({
 }));
 
 mock.module("../src/innertube.ts", () => ({
-	fetchCaptionTracks: mock(async () => []),
 	fetchVisitorData: mock(async (): Promise<string> => {
 		visitorDataRequests += 1;
 		if (visitorDataRequests === 1) {

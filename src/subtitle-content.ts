@@ -1,7 +1,7 @@
-import { fetchCaptionTracks, type RawCaptionTrack } from "./innertube.ts";
 import { fetchPoToken } from "./token-service.ts";
-import { ANDROID_VR_USER_AGENT } from "./youtube-client-profile.ts";
+import { fetchCaptionTracks, type RawCaptionTrack } from "./youtube-caption-tracks.ts";
 import { youtubeFetch } from "./youtube-fetch.ts";
+import { MWEB_USER_AGENT } from "./youtube-mweb-config.ts";
 
 export type SubtitleErrorCode =
 	| "subtitle_request_invalid"
@@ -32,8 +32,8 @@ export async function fetchSubtitleContent(
 	fetchYoutube: typeof youtubeFetch = youtubeFetch,
 ): Promise<Uint8Array> {
 	const request = parseSubtitleRequest(rawUrl);
-	const { visitorData, streamingPot } = await fetchPoToken(request.videoId);
-	const tracks = await fetchCaptionTracks(request.videoId, visitorData, streamingPot);
+	const { visitorData, poToken } = await fetchPoToken(request.videoId);
+	const tracks = await fetchCaptionTracks(request.videoId, visitorData, poToken);
 	const track = selectTrack(tracks, request);
 	if (!track?.baseUrl) {
 		throw new SubtitleFetchError("Subtitle track not found", "subtitle_track_not_found", 404);
@@ -43,8 +43,9 @@ export async function fetchSubtitleContent(
 		{
 			headers: {
 				accept: "text/vtt,*/*;q=0.8",
-				origin: "https://www.youtube.com",
-				"user-agent": ANDROID_VR_USER_AGENT,
+				origin: "https://m.youtube.com",
+				referer: "https://m.youtube.com/",
+				"user-agent": MWEB_USER_AGENT,
 				"x-goog-visitor-id": visitorData,
 			},
 		},
@@ -118,7 +119,7 @@ function selectTrack(
 }
 
 function refreshedVttUrl(baseUrl: string, translatedLanguageTag: string | null): URL {
-	const url = new URL(baseUrl, "https://www.youtube.com");
+	const url = new URL(baseUrl, "https://m.youtube.com");
 	if (
 		url.protocol !== "https:" ||
 		!isYoutubeHost(url.hostname) ||
