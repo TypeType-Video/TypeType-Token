@@ -4,6 +4,13 @@ import type { SubtitleTrack } from "../src/subtitles.ts";
 const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
 const PO_TOKEN = `pot-${VISITOR_DATA}`;
+const mockYoutubeFetch = mock(
+	async (_input: RequestInfo | URL): Promise<Response> =>
+		new Response("WEBVTT\n\n00:00.000 --> 00:01.000\nHello", {
+			status: 200,
+			headers: { "content-type": "text/vtt" },
+		}),
+);
 
 mock.module("../src/botguard-page.ts", () => ({
 	executeBotGuard: mock(async (): Promise<string> => "botguard-response-test"),
@@ -34,10 +41,11 @@ const frTrack = {
 };
 
 const asrTrack = {
-	baseUrl: "https://www.youtube.com/api/timedtext?lang=en",
+	baseUrl: "https://www.youtube.com/api/timedtext?v=video&lang=en&kind=asr&expire=999",
 	name: { simpleText: "English (auto-generated)" },
 	languageCode: "en",
 	kind: "asr",
+	vssId: "a.en",
 };
 
 const mockFetchCaptionTracks = mock(
@@ -67,7 +75,7 @@ describe("fetchSubtitles", () => {
 		});
 
 		expect(result[1]).toEqual({
-			url: "https://www.youtube.com/api/timedtext?lang=en",
+			url: "https://www.youtube.com/api/timedtext?v=video&lang=en&kind=asr&expire=999",
 			mimeType: "application/ttml+xml",
 			languageTag: "en",
 			displayLanguageName: "English (auto-generated)",
@@ -91,5 +99,78 @@ describe("fetchSubtitles", () => {
 		const result = await fetchSubtitles("partial-video");
 		expect(result).toHaveLength(1);
 		expect(result[0].languageTag).toBe("fr");
+	});
+
+	it("refreshes an expired manual track and preserves translation", async () => {
+		mockFetchCaptionTracks.mockImplementation(async () => [
+			{
+				...frTrack,
+				baseUrl: "https://www.youtube.com/api/timedtext?v=video&lang=fr&expire=999",
+				vssId: ".fr",
+			},
+		]);
+		mockYoutubeFetch.mockImplementation(
+			async () => new Response("WEBVTT\n\n00:00.000 --> 00:01.000\nBonjour"),
+		);
+		const { fetchSubtitleContent } = await import("../src/subtitle-content.ts");
+		const bytes = await fetchSubtitleContent(
+			"https://www.youtube.com/api/timedtext?v=video&lang=fr&expire=1&tlang=es&fmt=ttml",
+			mockYoutubeFetch,
+		);
+		const requested = new URL(String(mockYoutubeFetch.mock.calls.at(-1)?.[0]));
+
+		expect(new TextDecoder().decode(bytes).startsWith("WEBVTT")).toBe(true);
+		expect(requested.searchParams.get("expire")).toBe("999");
+		expect(requested.searchParams.get("fmt")).toBe("vtt");
+		expect(requested.searchParams.get("tlang")).toBe("es");
+	});
+
+	it("selects the refreshed automatic track", async () => {
+		mockFetchCaptionTracks.mockImplementation(async () => [
+			{ ...frTrack, languageCode: "en", vssId: ".en" },
+			asrTrack,
+		]);
+		mockYoutubeFetch.mockImplementation(async () => new Response("WEBVTT\n\nAutomatic"));
+		const { fetchSubtitleContent } = await import("../src/subtitle-content.ts");
+		await fetchSubtitleContent(
+			"https://www.youtube.com/api/timedtext?v=video&lang=en&kind=asr&expire=1",
+			mockYoutubeFetch,
+		);
+		const requested = new URL(String(mockYoutubeFetch.mock.calls.at(-1)?.[0]));
+
+		expect(requested.searchParams.get("kind")).toBe("asr");
+		expect(requested.searchParams.get("expire")).toBe("999");
+	});
+
+	it("returns a typed throttling failure without retrying", async () => {
+		mockFetchCaptionTracks.mockImplementation(async () => [asrTrack]);
+		mockYoutubeFetch.mockClear();
+		mockYoutubeFetch.mockImplementation(async () => new Response("", { status: 429 }));
+		const { fetchSubtitleContent, SubtitleFetchError } = await import("../src/subtitle-content.ts");
+		const failure = await fetchSubtitleContent(
+			"https://www.youtube.com/api/timedtext?v=video&lang=en&kind=asr",
+			mockYoutubeFetch,
+		).catch((error: unknown) => error);
+
+		expect(failure).toBeInstanceOf(SubtitleFetchError);
+		expect((failure as InstanceType<typeof SubtitleFetchError>).code).toBe(
+			"subtitle_upstream_throttled",
+		);
+		expect(mockYoutubeFetch).toHaveBeenCalledTimes(1);
+	});
+
+	it("rejects non-YouTube subtitle URLs before fetching", async () => {
+		mockYoutubeFetch.mockClear();
+		const { fetchSubtitleContent, SubtitleFetchError } = await import("../src/subtitle-content.ts");
+		const failure = await fetchSubtitleContent(
+			"https://example.com/api/timedtext?v=video&lang=en",
+			mockYoutubeFetch,
+		).catch((error: unknown) => error);
+
+		expect(failure).toBeInstanceOf(SubtitleFetchError);
+		expect((failure as InstanceType<typeof SubtitleFetchError>).code).toBe(
+			"subtitle_request_invalid",
+		);
+		expect(mockYoutubeFetch).not.toHaveBeenCalled();
 	});
 });

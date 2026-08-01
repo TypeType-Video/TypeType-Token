@@ -154,6 +154,17 @@ describe("handler", () => {
 		expect(Array.isArray(body)).toBe(true);
 	});
 
+	it("GET /subtitles/content without url returns a typed 400", async () => {
+		const { handler } = await import("../src/index.ts");
+		const res = await handler(new Request("http://localhost:8081/subtitles/content"));
+
+		expect(res.status).toBe(400);
+		expect(await res.json()).toEqual({
+			error: "url query parameter is required",
+			code: "subtitle_request_invalid",
+		});
+	});
+
 	it("GET /youtube/sabr/session without videoId returns 400", async () => {
 		const { handler } = await import("../src/index.ts");
 		const res = await handler(new Request("http://localhost:8081/youtube/sabr/session"));
