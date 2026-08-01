@@ -5,7 +5,7 @@ const firstSession = { id: "first" } as unknown as YoutubeInnertube;
 const secondSession = { id: "second" } as unknown as YoutubeInnertube;
 
 describe("YouTube caption tracks", () => {
-	it("loads and normalizes tracks through the MWEB player contract", async () => {
+	it("loads and normalizes tracks through the WEB player contract", async () => {
 		const { fetchCaptionTracks } = await import(
 			"../src/youtube-caption-tracks.ts?caption-contract"
 		);
@@ -32,12 +32,12 @@ describe("YouTube caption tracks", () => {
 			fetchPlayer,
 		});
 
-		expect(getInnertube).toHaveBeenCalledWith("MWEB", "visitor");
+		expect(getInnertube).toHaveBeenCalledWith("WEB", "visitor");
 		expect(fetchPlayer).toHaveBeenCalledWith("video", firstSession, "visitor-pot");
 		expect(invalidateInnertube).not.toHaveBeenCalled();
 		expect(tracks).toEqual([
 			{
-				baseUrl: "https://m.youtube.com/api/timedtext?v=video&lang=en",
+				baseUrl: "https://www.youtube.com/api/timedtext?v=video&lang=en",
 				name: { simpleText: "English" },
 				languageCode: "en",
 				kind: undefined,
@@ -46,7 +46,42 @@ describe("YouTube caption tracks", () => {
 		]);
 	});
 
-	it("recreates a rejected anonymous MWEB session only once", async () => {
+	it("falls back to MWEB when WEB does not return caption tracks", async () => {
+		const { fetchCaptionTracks } = await import(
+			"../src/youtube-caption-tracks.ts?caption-fallback"
+		);
+		const getInnertube = mock(async (client: "WEB" | "MWEB") =>
+			client === "WEB" ? firstSession : secondSession,
+		);
+		const invalidateInnertube = mock(async () => undefined);
+		const fetchPlayer = mock(async (_videoId: string, session: YoutubeInnertube) => ({
+			playability_status: { status: "OK" },
+			captions:
+				session === secondSession
+					? {
+							caption_tracks: [
+								{
+									base_url: "/api/timedtext?v=video&lang=en",
+									name: { toString: () => "English" },
+									language_code: "en",
+									vss_id: ".en",
+								},
+							],
+						}
+					: undefined,
+		}));
+
+		const tracks = await fetchCaptionTracks("video", "visitor", "visitor-pot", {
+			getInnertube,
+			invalidateInnertube,
+			fetchPlayer,
+		});
+
+		expect(getInnertube.mock.calls.map(([client]) => client)).toEqual(["WEB", "MWEB"]);
+		expect(tracks[0]?.baseUrl).toBe("https://m.youtube.com/api/timedtext?v=video&lang=en");
+	});
+
+	it("recreates a rejected anonymous WEB session only once", async () => {
 		const { fetchCaptionTracks } = await import(
 			"../src/youtube-caption-tracks.ts?caption-contract"
 		);
@@ -62,7 +97,19 @@ describe("YouTube caption tracks", () => {
 							reason: "Sign in to confirm you are not a bot",
 						},
 					}
-				: { playability_status: { status: "OK" } },
+				: {
+						playability_status: { status: "OK" },
+						captions: {
+							caption_tracks: [
+								{
+									base_url: "/api/timedtext?v=video&lang=en",
+									name: { toString: () => "English" },
+									language_code: "en",
+									vss_id: ".en",
+								},
+							],
+						},
+					},
 		);
 
 		await fetchCaptionTracks("video", "visitor", "visitor-pot", {
@@ -72,7 +119,7 @@ describe("YouTube caption tracks", () => {
 		});
 
 		expect(getInnertube).toHaveBeenCalledTimes(2);
-		expect(invalidateInnertube).toHaveBeenCalledWith("MWEB", "visitor", firstSession);
+		expect(invalidateInnertube).toHaveBeenCalledWith("WEB", "visitor", firstSession);
 		expect(fetchPlayer).toHaveBeenCalledTimes(2);
 	});
 });
