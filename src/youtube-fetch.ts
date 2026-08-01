@@ -6,9 +6,5 @@ export async function youtubeFetch(
 ): Promise<Response> {
 	if (proxyUrl === null) return fetch(input, init);
 	const proxyInit: BunFetchRequestInit = { ...init, proxy: proxyUrl };
-	try {
-		return await fetch(input, proxyInit);
-	} catch {
-		return fetch(input, init);
-	}
+	return fetch(input, proxyInit);
 }
