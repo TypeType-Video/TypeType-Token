@@ -1,6 +1,5 @@
-import type { RawCaptionTrack } from "./innertube.ts";
-import { fetchCaptionTracks } from "./innertube.ts";
 import { fetchPoToken } from "./token-service.ts";
+import { fetchCaptionTracks, type RawCaptionTrack } from "./youtube-caption-tracks.ts";
 
 export type SubtitleTrack = {
 	url: string;
@@ -25,8 +24,8 @@ function toSubtitleTrack(raw: RawCaptionTrack): SubtitleTrack | null {
 }
 
 export async function fetchSubtitles(videoId: string): Promise<SubtitleTrack[]> {
-	const { visitorData, streamingPot } = await fetchPoToken(videoId);
-	const raw = await fetchCaptionTracks(videoId, visitorData, streamingPot);
+	const { visitorData, poToken } = await fetchPoToken(videoId);
+	const raw = await fetchCaptionTracks(videoId, visitorData, poToken);
 	return raw.flatMap((t) => {
 		const track = toSubtitleTrack(t);
 		return track ? [track] : [];

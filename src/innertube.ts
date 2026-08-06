@@ -10,12 +10,6 @@ const USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
 	"Chrome/131.0.0.0 Safari/537.36";
 
-const ANDROID_VR_USER_AGENT =
-	"com.google.android.apps.youtube.vr.oculus/1.65.10 " +
-	"(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
-const ANDROID_VR_CLIENT_VERSION = "1.65.10";
-const ANDROID_VR_CLIENT_NAME_ID = "28";
-
 const WAA_HEADERS: Record<string, string> = {
 	"content-type": "application/json+protobuf",
 	"x-goog-api-key": WAA_API_KEY,
@@ -54,68 +48,6 @@ export async function fetchVisitorData(): Promise<string> {
 	}
 
 	return visitorData;
-}
-
-export type RawCaptionTrack = {
-	baseUrl?: string;
-	name?: { simpleText?: string; runs?: { text?: string }[] };
-	languageCode?: string;
-	kind?: string;
-};
-
-type PlayerResponse = {
-	captions?: {
-		playerCaptionsTracklistRenderer?: {
-			captionTracks?: RawCaptionTrack[];
-		};
-	};
-};
-
-export async function fetchCaptionTracks(
-	videoId: string,
-	visitorData: string,
-	poToken: string,
-): Promise<RawCaptionTrack[]> {
-	const response = await youtubeFetch(
-		`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_API_KEY}`,
-		{
-			method: "POST",
-			headers: {
-				"content-type": "application/json",
-				"x-youtube-client-name": ANDROID_VR_CLIENT_NAME_ID,
-				"x-youtube-client-version": ANDROID_VR_CLIENT_VERSION,
-				"x-goog-visitor-id": visitorData,
-				origin: "https://www.youtube.com",
-				"user-agent": ANDROID_VR_USER_AGENT,
-			},
-			body: JSON.stringify({
-				context: {
-					client: {
-						hl: "en",
-						gl: "US",
-						clientName: "ANDROID_VR",
-						clientVersion: ANDROID_VR_CLIENT_VERSION,
-						androidSdkVersion: 32,
-						deviceMake: "Oculus",
-						deviceModel: "Quest 3",
-						userAgent: ANDROID_VR_USER_AGENT,
-						osName: "Android",
-						osVersion: "12L",
-						visitorData,
-					},
-				},
-				videoId,
-				serviceIntegrityDimensions: { poToken },
-			}),
-		},
-	);
-
-	if (!response.ok) {
-		throw new Error(`Innertube player request failed: ${response.status}`);
-	}
-
-	const data = (await response.json()) as PlayerResponse;
-	return data.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
 }
 
 export async function fetchIntegrityToken(botguardResponse: string): Promise<IntegrityTokenData> {
