@@ -12,6 +12,10 @@ export type RemoteLoginStartResponse = {
 	expiresAt: number;
 };
 
+export type RemoteLoginReadinessRequest = {
+	callbackUrl: string;
+};
+
 export type PointerButton = "left" | "middle" | "right";
 
 export type RemoteLoginInput =
@@ -50,6 +54,12 @@ export function parseStartRequest(value: unknown): RemoteLoginStartRequest | nul
 	const ttlMs = boundedInteger(value.ttlMs, 300_000, 600_000);
 	if (!serverSessionId || !userId || !callbackUrl || ttlMs === null) return null;
 	return { serverSessionId, userId, callbackUrl, ttlMs };
+}
+
+export function parseReadinessRequest(value: unknown): RemoteLoginReadinessRequest | null {
+	if (!isRecord(value)) return null;
+	const callbackUrl = stringValue(value.callbackUrl, 2048);
+	return callbackUrl ? { callbackUrl } : null;
 }
 
 export function parseRemoteLoginInput(raw: string): RemoteLoginInput | null {

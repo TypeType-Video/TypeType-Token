@@ -64,6 +64,16 @@ function launchOptions(config: RemoteLoginConfig): Parameters<typeof chromium.la
 	};
 }
 
+function contextOptions(config: RemoteLoginConfig): Parameters<Browser["newContext"]>[0] {
+	return {
+		acceptDownloads: false,
+		viewport: { width: config.viewportWidth, height: config.viewportHeight },
+		deviceScaleFactor: config.deviceScaleFactor,
+		userAgent: config.userAgent,
+		locale: config.locale,
+	};
+}
+
 async function ensureRemoteBrowser(config: RemoteLoginConfig): Promise<Browser> {
 	if (remoteBrowser?.isConnected()) return remoteBrowser;
 	remoteBrowser = await chromium.launch(launchOptions(config));
@@ -123,13 +133,7 @@ export async function createRemoteLoginPage(
 	onPoToken: (poToken: string) => void,
 ): Promise<RemoteLoginPage> {
 	const browser = await ensureRemoteBrowser(config);
-	const context = await browser.newContext({
-		acceptDownloads: false,
-		viewport: { width: config.viewportWidth, height: config.viewportHeight },
-		deviceScaleFactor: config.deviceScaleFactor,
-		userAgent: config.userAgent,
-		locale: config.locale,
-	});
+	const context = await browser.newContext(contextOptions(config));
 	const page = await context.newPage();
 	page.on("request", (request) => {
 		const poToken = capturePot(request.url());
@@ -143,6 +147,12 @@ export async function createRemoteLoginPage(
 			formatNetscapeCookies(await context.cookies(COOKIE_URLS), config.maxCookieBytes),
 		hasLoginCookie: async () => (await context.cookies(COOKIE_URLS)).some(isLoginCookie),
 	};
+}
+
+export async function probeRemoteLoginBrowser(config: RemoteLoginConfig): Promise<void> {
+	const browser = await ensureRemoteBrowser(config);
+	const context = await browser.newContext(contextOptions(config));
+	await context.close();
 }
 
 export async function closeRemoteLoginBrowser(): Promise<void> {

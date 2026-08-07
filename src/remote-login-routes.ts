@@ -5,7 +5,7 @@ import {
 	type RemoteLoginConfig,
 } from "./remote-login-config.ts";
 import type { RemoteLoginManager } from "./remote-login-manager.ts";
-import { parseStartRequest } from "./remote-login-messages.ts";
+import { parseReadinessRequest, parseStartRequest } from "./remote-login-messages.ts";
 import type { RemoteLoginConnection } from "./remote-login-session-types.ts";
 
 export type RemoteLoginWebSocketData = {
@@ -65,6 +65,20 @@ export function createRemoteLoginHandler(manager: RemoteLoginManager, config: Re
 		url: URL,
 		server?: Server<RemoteLoginWebSocketData>,
 	): Promise<Response | null | undefined> => {
+		if (url.pathname === "/youtube-remote-login/readiness" && req.method === "POST") {
+			const denied = requireInternal(req, config);
+			if (denied) return denied;
+			const body = parseReadinessRequest(await requestBody(req));
+			if (!body) return Response.json({ error: "invalid request body" }, { status: 400 });
+			if (!isRemoteLoginCallbackAllowed(body.callbackUrl, config)) {
+				return Response.json({ error: "callbackUrl is not allowed" }, { status: 400 });
+			}
+			if (!(await manager.isReady())) {
+				return Response.json({ error: "remote browser is unavailable" }, { status: 503 });
+			}
+			return new Response(null, { status: 204 });
+		}
+
 		if (url.pathname === "/youtube-remote-login/start" && req.method === "POST") {
 			const denied = requireInternal(req, config);
 			if (denied) return denied;
