@@ -1,4 +1,4 @@
-import { createRemoteLoginPage } from "./remote-login-browser.ts";
+import { createRemoteLoginPage, probeRemoteLoginBrowser } from "./remote-login-browser.ts";
 import type { RemoteLoginCompletionTarget } from "./remote-login-callback.ts";
 import type { RemoteLoginConfig } from "./remote-login-config.ts";
 import type { RemoteLoginStartResponse } from "./remote-login-messages.ts";
@@ -14,18 +14,32 @@ export type RemoteLoginStartOptions = {
 	target: RemoteLoginCompletionTarget;
 };
 
+export type RemoteLoginRuntimeProbe = (config: RemoteLoginConfig) => Promise<void>;
+
 export class RemoteLoginManager {
 	private readonly config: RemoteLoginConfig;
 	private readonly createPage: RemoteLoginPageFactory;
+	private readonly probeRuntime: RemoteLoginRuntimeProbe;
 	private readonly sessions = new Map<string, RemoteLoginSession>();
 	private readonly byUser = new Map<string, string>();
 
 	constructor(
 		config: RemoteLoginConfig,
 		createPage: RemoteLoginPageFactory = createRemoteLoginPage,
+		probeRuntime: RemoteLoginRuntimeProbe = probeRemoteLoginBrowser,
 	) {
 		this.config = config;
 		this.createPage = createPage;
+		this.probeRuntime = probeRuntime;
+	}
+
+	async isReady(): Promise<boolean> {
+		try {
+			await this.probeRuntime(this.config);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	async start(options: RemoteLoginStartOptions): Promise<RemoteLoginStartResponse | null> {
