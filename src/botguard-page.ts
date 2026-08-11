@@ -1,11 +1,9 @@
 import type { Browser, Page } from "playwright";
 import { chromium } from "playwright";
+import { WEB_USER_AGENT } from "./botguard-challenge.ts";
 
 const ROUTE = "https://www.youtube.com/__bgp__";
 const BLANK_HTML = "<!DOCTYPE html><html><body></body></html>";
-const USER_AGENT =
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-	"Chrome/131.0.0.0 Safari/537.3";
 
 let browser: Browser | null = null;
 let page: Page | null = null;
@@ -18,7 +16,7 @@ async function ensurePage(): Promise<Page> {
 		});
 	}
 	if (!page || page.isClosed()) {
-		page = await browser.newPage({ userAgent: USER_AGENT });
+		page = await browser.newPage({ userAgent: WEB_USER_AGENT });
 		await page.route(ROUTE, (route) =>
 			route.fulfill({ contentType: "text/html", body: BLANK_HTML }),
 		);
@@ -27,7 +25,7 @@ async function ensurePage(): Promise<Page> {
 	return page;
 }
 
-type BotGuardArgs = { script: string; prog: string; name: string };
+type BotGuardArgs = { script: string; prog: string; name: string; eventId: string };
 type MintArgs = { token: string; id: string };
 type PoTokenMinter = (id: Uint8Array) => Uint8Array | Promise<Uint8Array>;
 type PoTokenGlobal = Record<string, unknown> & {
@@ -40,10 +38,23 @@ export async function executeBotGuard(
 	interpreterScript: string,
 	program: string,
 	globalName: string,
+	eventId: string,
 ): Promise<string> {
 	const p = await ensurePage();
 	return p.evaluate(
 		async (args: BotGuardArgs): Promise<string> => {
+			const root = globalThis as Record<string, unknown>;
+			let yt = root.yt as Record<string, unknown> | undefined;
+			if (!yt) {
+				yt = {};
+				root.yt = yt;
+			}
+			let config = yt.config_ as Record<string, unknown> | undefined;
+			if (!config) {
+				config = {};
+				yt.config_ = config;
+			}
+			config.EVENT_ID = args.eventId;
 			new Function(args.script)();
 			const g = globalThis as Record<string, Record<string, (...a: unknown[]) => unknown>>;
 			const vm = g[args.name];
@@ -87,7 +98,7 @@ export async function executeBotGuard(
 				af((r: unknown) => resolve(r as string), [undefined, undefined, wpo, undefined]);
 			});
 		},
-		{ script: interpreterScript, prog: program, name: globalName },
+		{ script: interpreterScript, prog: program, name: globalName, eventId },
 	);
 }
 

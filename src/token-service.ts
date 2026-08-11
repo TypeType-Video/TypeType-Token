@@ -33,6 +33,7 @@ async function buildSession(): Promise<CachedSession> {
 		challenge.interpreterScript,
 		challenge.program,
 		challenge.globalName,
+		challenge.eventId,
 	);
 	const integrityTokenData = await fetchIntegrityToken(botguardResponse);
 

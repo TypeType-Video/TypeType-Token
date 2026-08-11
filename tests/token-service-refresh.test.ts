@@ -56,6 +56,7 @@ mock.module("../src/botguard-challenge.ts", () => ({
 		interpreterScript: "interpreter",
 		program: "program",
 		globalName: "trayride",
+		eventId: "event-id",
 	})),
 }));
 
