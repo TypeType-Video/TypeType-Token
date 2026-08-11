@@ -7,7 +7,7 @@ const INTEGRITY_TOKEN = "integrity-token-test-xyz";
 let currentVisitorData = VISITOR_DATA;
 
 const mockExecuteBotGuard = mock(
-	async (_script: string, _prog: string, _name: string): Promise<string> =>
+	async (_script: string, _prog: string, _name: string, _eventId: string): Promise<string> =>
 		"botguard-response-test",
 );
 const mockMintPoToken = mock(async (_token: string, id: string): Promise<string> => `pot-${id}`);
@@ -24,6 +24,7 @@ mock.module("../src/botguard-challenge.ts", () => ({
 		interpreterScript: "/* noop */",
 		program: "program-test",
 		globalName: "vm_test",
+		eventId: "event-test",
 	})),
 }));
 
@@ -66,6 +67,12 @@ describe("fetchPoToken", () => {
 		expect(r1.streamingPot).toBe("pot-concurrent-1");
 		expect(r2.streamingPot).toBe("pot-concurrent-2");
 		expect(mockExecuteBotGuard.mock.calls.length).toBe(1);
+		expect(mockExecuteBotGuard).toHaveBeenCalledWith(
+			"/* noop */",
+			"program-test",
+			"vm_test",
+			"event-test",
+		);
 	});
 
 	it("returns correct token structure on first call", async () => {

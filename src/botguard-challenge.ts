@@ -1,12 +1,12 @@
 import { Constants } from "youtubei.js";
 import { youtubeFetch } from "./youtube-fetch.ts";
+import { parseYoutubePageAttestation } from "./youtube-page-attestation.ts";
 
 export const WEB_CLIENT_VERSION = Constants.CLIENTS.WEB.VERSION;
-const ATT_GET_URL = "https://www.youtube.com/youtubei/v1/att/get?prettyPrint=false";
-const WAA_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
-const USER_AGENT =
+export const WEB_USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
 	"Chrome/131.0.0.0 Safari/537.3";
+const YOUTUBE_HOME_URL = "https://www.youtube.com/";
 
 type AttGetChallenge = {
 	interpreterJavascript?: {
@@ -23,6 +23,7 @@ export type BotGuardChallenge = {
 	interpreterScript: string;
 	program: string;
 	globalName: string;
+	eventId: string;
 };
 
 async function resolveInterpreterScript(challenge: AttGetChallenge): Promise<string> {
@@ -51,38 +52,21 @@ async function resolveInterpreterScript(challenge: AttGetChallenge): Promise<str
 }
 
 export async function fetchChallenge(visitorData: string): Promise<BotGuardChallenge> {
-	const response = await youtubeFetch(ATT_GET_URL, {
-		method: "POST",
+	const response = await youtubeFetch(YOUTUBE_HOME_URL, {
 		headers: {
-			"Content-Type": "application/json",
-			"User-Agent": USER_AGENT,
-			Accept: "application/json",
+			"User-Agent": WEB_USER_AGENT,
+			Accept: "text/html,application/xhtml+xml",
+			"Accept-Language": "en-US,en;q=0.7",
 			"X-Goog-Visitor-Id": visitorData,
-			"X-Youtube-Client-Name": "1",
-			"X-Youtube-Client-Version": WEB_CLIENT_VERSION,
-			"x-goog-api-key": WAA_API_KEY,
-			"x-user-agent": "grpc-web-javascript/0.1",
 		},
-		body: JSON.stringify({
-			engagementType: "ENGAGEMENT_TYPE_UNBOUND",
-			context: {
-				client: {
-					clientName: "WEB",
-					clientVersion: WEB_CLIENT_VERSION,
-					hl: "en",
-					gl: "US",
-					utcOffsetMinutes: 0,
-					visitorData,
-				},
-			},
-		}),
 	});
 
 	if (!response.ok) {
-		throw new Error(`att/get request failed: ${response.status}`);
+		throw new Error(`YouTube page request failed: ${response.status}`);
 	}
 
-	const data = (await response.json()) as { bgChallenge?: AttGetChallenge };
+	const page = parseYoutubePageAttestation(await response.text());
+	const data = JSON.parse(page.rawChallenge) as { bgChallenge?: AttGetChallenge };
 	const challenge = data.bgChallenge;
 
 	if (
@@ -90,7 +74,7 @@ export async function fetchChallenge(visitorData: string): Promise<BotGuardChall
 		typeof challenge.program !== "string" ||
 		typeof challenge.globalName !== "string"
 	) {
-		throw new Error("att/get response missing a usable BotGuard challenge");
+		throw new Error("YouTube page has no usable BotGuard challenge");
 	}
 
 	const interpreterScript = await resolveInterpreterScript(challenge);
@@ -99,5 +83,6 @@ export async function fetchChallenge(visitorData: string): Promise<BotGuardChall
 		interpreterScript,
 		program: challenge.program,
 		globalName: challenge.globalName,
+		eventId: page.eventId,
 	};
 }

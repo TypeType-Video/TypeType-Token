@@ -8,38 +8,40 @@ afterEach(() => {
 });
 
 describe("fetchChallenge", () => {
-	it("binds att/get to the current visitor session", async () => {
+	it("binds the page-native challenge to the current visitor session", async () => {
 		let request: Request | null = null;
+		const rawChallenge = JSON.stringify({
+			bgChallenge: {
+				interpreterJavascript: {
+					privateDoNotAccessOrElseSafeScriptWrappedValue: "interpreter",
+				},
+				program: "program",
+				globalName: "trayride",
+			},
+		});
 		globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
 			request = new Request(input, init);
-			return Response.json({
-				bgChallenge: {
-					interpreterJavascript: {
-						privateDoNotAccessOrElseSafeScriptWrappedValue: "interpreter",
-					},
-					program: "program",
-					globalName: "trayride",
-				},
-			});
+			return new Response(
+				`<script>ytcfg.set({"EVENT_ID":"event-123"});` +
+					`window.ytAtN({"R":${JSON.stringify(rawChallenge)}});</script>`,
+			);
 		}) as typeof fetch;
 
 		const { fetchChallenge, WEB_CLIENT_VERSION } = await import(
 			"../src/botguard-challenge.ts?contract-test"
 		);
 		const challenge = await fetchChallenge("visitor-session");
-		const body = (await request?.json()) as {
-			context: { client: { visitorData: string; clientVersion: string } };
-		};
 
 		expect(challenge).toEqual({
 			interpreterScript: "interpreter",
 			program: "program",
 			globalName: "trayride",
+			eventId: "event-123",
 		});
 		expect(WEB_CLIENT_VERSION).toBe(Constants.CLIENTS.WEB.VERSION);
+		expect(request?.url).toBe("https://www.youtube.com/");
+		expect(request?.method).toBe("GET");
 		expect(request?.headers.get("X-Goog-Visitor-Id")).toBe("visitor-session");
-		expect(request?.headers.get("X-Youtube-Client-Name")).toBe("1");
-		expect(body.context.client.visitorData).toBe("visitor-session");
-		expect(body.context.client.clientVersion).toBe(Constants.CLIENTS.WEB.VERSION);
+		expect(request?.headers.get("Accept-Language")).toBe("en-US,en;q=0.7");
 	});
 });
