@@ -11,6 +11,7 @@ type RemoteLoginCompletionPayload = {
 	status: "completed";
 	cookies: string;
 	poToken: string;
+	authUser: number;
 	capturedAt: number;
 };
 
@@ -19,6 +20,7 @@ export async function sendRemoteLoginCompletion(
 	tokenSessionId: string,
 	cookies: string,
 	poToken: string,
+	authUser: number,
 	config: RemoteLoginConfig,
 ): Promise<boolean> {
 	if (!config.internalToken) return false;
@@ -30,6 +32,7 @@ export async function sendRemoteLoginCompletion(
 		status: "completed",
 		cookies,
 		poToken,
+		authUser,
 		capturedAt: Date.now(),
 	};
 
