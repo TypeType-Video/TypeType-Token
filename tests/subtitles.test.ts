@@ -33,6 +33,14 @@ mock.module("../src/token-service.ts", () => ({
 		poToken: PO_TOKEN,
 		streamingPot: `pot-${videoId}`,
 	})),
+	fetchSessionPoTokens: mock(async (videoId: string, sessionBinding: string) => ({
+		visitorData: VISITOR_DATA,
+		visitorBoundPoToken: PO_TOKEN,
+		videoBoundPoToken: `pot-${videoId}`,
+		poToken: PO_TOKEN,
+		streamingPot: `pot-${videoId}`,
+		sessionBoundPoToken: `pot-${sessionBinding}`,
+	})),
 }));
 
 const frTrack = {
