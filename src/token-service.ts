@@ -13,6 +13,10 @@ export type TokenResult = {
 	streamingPot: string;
 };
 
+export type SessionTokenResult = TokenResult & {
+	sessionBoundPoToken: string;
+};
+
 type CachedSession = {
 	visitorData: string;
 	visitorBoundPoToken: string;
@@ -118,10 +122,32 @@ export async function fetchPoToken(
 	refreshVideo = false,
 ): Promise<TokenResult> {
 	const currentSession = await getOrRefreshSession(forceRefresh);
-	const { visitorData, visitorBoundPoToken } = currentSession;
 	const videoBoundPoToken = refreshVideo
 		? await refreshVideoBoundPoToken(currentSession, videoId)
 		: await getVideoBoundPoToken(currentSession, videoId);
+	return tokenResult(currentSession, videoBoundPoToken);
+}
+
+export async function fetchSessionPoTokens(
+	videoId: string,
+	sessionBinding: string,
+	refreshVideo = false,
+): Promise<SessionTokenResult> {
+	const currentSession = await getOrRefreshSession();
+	const [videoBoundPoToken, sessionBoundPoToken] = await Promise.all([
+		refreshVideo
+			? refreshVideoBoundPoToken(currentSession, videoId)
+			: getVideoBoundPoToken(currentSession, videoId),
+		getVideoBoundPoToken(currentSession, sessionBinding),
+	]);
+	return {
+		...tokenResult(currentSession, videoBoundPoToken),
+		sessionBoundPoToken,
+	};
+}
+
+function tokenResult(currentSession: CachedSession, videoBoundPoToken: string): TokenResult {
+	const { visitorData, visitorBoundPoToken } = currentSession;
 	return {
 		visitorData,
 		visitorBoundPoToken,
