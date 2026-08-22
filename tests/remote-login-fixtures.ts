@@ -62,6 +62,7 @@ export function fakeRemoteLoginPage(overrides: Partial<RemoteLoginPage> = {}): R
 		},
 		close: async () => undefined,
 		cookies: async () => "# Netscape HTTP Cookie File",
+		authUser: async () => 0,
 		hasLoginCookie: async () => false,
 		...overrides,
 	};

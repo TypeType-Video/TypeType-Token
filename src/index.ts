@@ -1,5 +1,6 @@
 import type { Server } from "bun";
 import { buildInfo } from "./build-info.ts";
+import { handlePoTokenRequest } from "./po-token-routes.ts";
 import { readRemoteLoginConfig } from "./remote-login-config.ts";
 import { RemoteLoginManager } from "./remote-login-manager.ts";
 import {
@@ -8,7 +9,6 @@ import {
 	type RemoteLoginWebSocketData,
 } from "./remote-login-routes.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
-import { fetchPoToken } from "./token-service.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
@@ -27,26 +27,8 @@ export async function handler(
 	if (remoteLoginResponse !== null) return remoteLoginResponse;
 	const subtitleResponse = await handleSubtitleRequest(req, url);
 	if (subtitleResponse !== null) return subtitleResponse;
-
-	if (req.method === "GET" && url.pathname === "/potoken") {
-		const videoId = url.searchParams.get("videoId");
-
-		if (!videoId) {
-			return Response.json({ error: "videoId query parameter is required" }, { status: 400 });
-		}
-
-		try {
-			const result = await fetchPoToken(
-				videoId,
-				url.searchParams.get("refresh") === "true",
-				url.searchParams.get("refreshVideo") === "true",
-			);
-			return Response.json(result);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Internal error";
-			return Response.json({ error: message }, { status: 500 });
-		}
-	}
+	const poTokenResponse = await handlePoTokenRequest(req, url);
+	if (poTokenResponse !== null) return poTokenResponse;
 
 	if (req.method === "GET" && url.pathname === "/youtube/sabr/session") {
 		const videoId = url.searchParams.get("videoId");

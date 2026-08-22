@@ -44,6 +44,7 @@ export type RemoteLoginPage = {
 	};
 	close: () => Promise<void>;
 	cookies: () => Promise<string>;
+	authUser: () => Promise<number>;
 	hasLoginCookie: () => Promise<boolean>;
 };
 
@@ -145,6 +146,16 @@ export async function createRemoteLoginPage(
 		close: () => context.close().catch(() => undefined),
 		cookies: async () =>
 			formatNetscapeCookies(await context.cookies(COOKIE_URLS), config.maxCookieBytes),
+		authUser: async () =>
+			page.evaluate(() => {
+				const ytcfg = (
+					globalThis as typeof globalThis & {
+						ytcfg?: { get: (key: string) => unknown };
+					}
+				).ytcfg;
+				const value = Number(ytcfg?.get("SESSION_INDEX") ?? 0);
+				return Number.isInteger(value) && value >= 0 && value <= 99 ? value : 0;
+			}),
 		hasLoginCookie: async () => (await context.cookies(COOKIE_URLS)).some(isLoginCookie),
 	};
 }

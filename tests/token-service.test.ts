@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js";
-import type { TokenResult } from "../src/token-service.ts";
+import type { SessionTokenResult, TokenResult } from "../src/token-service.ts";
 
 const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
@@ -43,11 +43,17 @@ let fetchPoToken: (
 	forceRefresh?: boolean,
 	refreshVideo?: boolean,
 ) => Promise<TokenResult>;
+let fetchSessionPoTokens: (
+	videoId: string,
+	sessionBinding: string,
+	refreshVideo?: boolean,
+) => Promise<SessionTokenResult>;
 
 describe("fetchPoToken", () => {
 	beforeAll(async () => {
 		const module = await import("../src/token-service.ts?token-service-test");
 		fetchPoToken = module.fetchPoToken;
+		fetchSessionPoTokens = module.fetchSessionPoTokens;
 	});
 
 	it("does not call buildSession twice on concurrent requests", async () => {
@@ -84,6 +90,25 @@ describe("fetchPoToken", () => {
 		expect(result.poToken).toBe(`pot-${VISITOR_DATA}`);
 		expect(result.streamingPot).toBe("pot-video-id-1");
 		expect(mockExecuteBotGuard.mock.calls.length).toBe(1);
+	});
+
+	it("mints session and video tokens from one BotGuard session", async () => {
+		const callsBefore = mockExecuteBotGuard.mock.calls.length;
+		const result = await fetchSessionPoTokens("kids-video", "account-visitor");
+
+		expect(result.visitorData).toBe(currentVisitorData);
+		expect(result.videoBoundPoToken).toBe("pot-kids-video");
+		expect(result.sessionBoundPoToken).toBe("pot-account-visitor");
+		expect(mockExecuteBotGuard.mock.calls.length).toBe(callsBefore);
+	});
+
+	it("refreshes the video token without changing the session binding", async () => {
+		const callsBefore = mockMintPoToken.mock.calls.length;
+		const result = await fetchSessionPoTokens("kids-video", "account-visitor", true);
+
+		expect(result.videoBoundPoToken).toBe("pot-kids-video");
+		expect(result.sessionBoundPoToken).toBe("pot-account-visitor");
+		expect(mockMintPoToken.mock.calls.length).toBe(callsBefore + 1);
 	});
 
 	it("uses cached session on subsequent calls without re-initializing", async () => {

@@ -110,11 +110,13 @@ export class RemoteLoginSession {
 		const poToken = await this.poToken.wait(this.config.potTimeoutMs);
 		if (!poToken || this.closed) return this.fail("PO token capture timed out");
 		const cookies = await this.page.cookies();
+		const authUser = await this.page.authUser();
 		const sent = await sendRemoteLoginCompletion(
 			this.target,
 			this.sessionId,
 			cookies,
 			poToken,
+			authUser,
 			this.config,
 		);
 		if (!sent || this.closed) return this.fail("Completion callback failed");

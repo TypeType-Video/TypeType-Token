@@ -52,6 +52,10 @@ const mockFetchYoutubeSabrSession = mock(
 
 mock.module("../src/token-service.ts", () => ({
 	fetchPoToken: mockFetchPoToken,
+	fetchSessionPoTokens: mock(async () => ({
+		...(await mockFetchPoToken("abc")),
+		sessionBoundPoToken: "session-bound-token",
+	})),
 }));
 
 mock.module("../src/innertube.ts", () => ({

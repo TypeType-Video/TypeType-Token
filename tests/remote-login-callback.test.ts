@@ -10,6 +10,7 @@ describe("sendRemoteLoginCompletion", () => {
 			"token-session",
 			"# Netscape HTTP Cookie File",
 			"captured-pot",
+			0,
 			remoteLoginTestConfig({ internalToken: null }),
 		);
 
@@ -18,7 +19,12 @@ describe("sendRemoteLoginCompletion", () => {
 
 	it("posts the completion payload to TypeType-Server", async () => {
 		let header: string | null = null;
-		let payload: { sessionId: string; tokenSessionId: string; status: string } | null = null;
+		let payload: {
+			sessionId: string;
+			tokenSessionId: string;
+			status: string;
+			authUser: number;
+		} | null = null;
 		const server = Bun.serve({
 			port: 0,
 			fetch: async (req) => {
@@ -39,6 +45,7 @@ describe("sendRemoteLoginCompletion", () => {
 				"token-session",
 				"# Netscape HTTP Cookie File",
 				"captured-pot",
+				2,
 				config,
 			);
 
@@ -47,6 +54,7 @@ describe("sendRemoteLoginCompletion", () => {
 			expect(payload?.sessionId).toBe("server-session");
 			expect(payload?.tokenSessionId).toBe("token-session");
 			expect(payload?.status).toBe("completed");
+			expect(payload?.authUser).toBe(2);
 		} finally {
 			server.stop(true);
 		}
