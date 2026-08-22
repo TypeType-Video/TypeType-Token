@@ -1,7 +1,6 @@
-import type { EvalResult } from "youtubei.js";
-import { Platform } from "youtubei.js";
+import { Platform, type Types } from "youtubei.js";
 
-export function evaluateYoutubePlayerScript(output: string): EvalResult {
+export function evaluateYoutubePlayerScript(output: string): Types.EvalResult {
 	return new Function(output)();
 }
 

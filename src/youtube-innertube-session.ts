@@ -50,7 +50,7 @@ const sessions = new YoutubeInnertubeSessions<YoutubeInnertube>(async (client, v
 	const innertube = await Innertube.create({
 		cache: new UniversalCache(true),
 		client_type: client === "MWEB" ? ClientType.MWEB : ClientType.WEB,
-		fetch: youtubeFetch,
+		fetch: youtubeFetch as typeof fetch,
 		visitor_data: visitorData,
 	});
 	if (client === "MWEB") {

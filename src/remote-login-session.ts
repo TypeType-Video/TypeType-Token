@@ -1,3 +1,4 @@
+import type { RemoteLoginPage } from "./remote-login-browser.ts";
 import { sendRemoteLoginCompletion } from "./remote-login-callback.ts";
 import type { RemoteLoginConfig } from "./remote-login-config.ts";
 import { applyRemoteLoginInput } from "./remote-login-input.ts";

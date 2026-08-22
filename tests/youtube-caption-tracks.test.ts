@@ -7,6 +7,7 @@ const secondSession = { id: "second" } as unknown as YoutubeInnertube;
 describe("YouTube caption tracks", () => {
 	it("loads and normalizes tracks through the WEB player contract", async () => {
 		const { fetchCaptionTracks } = await import(
+			// @ts-expect-error Bun uses the query to isolate this module instance.
 			"../src/youtube-caption-tracks.ts?caption-contract"
 		);
 		const getInnertube = mock(async () => firstSession);
@@ -48,6 +49,7 @@ describe("YouTube caption tracks", () => {
 
 	it("falls back to MWEB when WEB does not return caption tracks", async () => {
 		const { fetchCaptionTracks } = await import(
+			// @ts-expect-error Bun uses the query to isolate this module instance.
 			"../src/youtube-caption-tracks.ts?caption-fallback"
 		);
 		const getInnertube = mock(async (client: "WEB" | "MWEB") =>
@@ -83,6 +85,7 @@ describe("YouTube caption tracks", () => {
 
 	it("recreates a rejected anonymous WEB session only once", async () => {
 		const { fetchCaptionTracks } = await import(
+			// @ts-expect-error Bun uses the query to isolate this module instance.
 			"../src/youtube-caption-tracks.ts?caption-contract"
 		);
 		const getInnertube = mock(async () =>

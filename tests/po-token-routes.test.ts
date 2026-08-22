@@ -23,6 +23,7 @@ mock.module("../src/token-service.ts", () => ({
 
 describe("POST /potoken/session", () => {
 	it("returns tokens bound by one internal request", async () => {
+		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const { handlePoTokenRequest } = await import("../src/po-token-routes.ts?session-route-test");
 		const request = new Request("http://localhost:8081/potoken/session", {
 			method: "POST",
@@ -40,6 +41,7 @@ describe("POST /potoken/session", () => {
 	});
 
 	it("rejects incomplete and oversized bindings", async () => {
+		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const { handlePoTokenRequest } = await import("../src/po-token-routes.ts?session-route-test");
 		const callsBefore = fetchSessionPoTokens.mock.calls.length;
 		const request = new Request("http://localhost:8081/potoken/session", {

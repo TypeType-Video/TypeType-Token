@@ -30,7 +30,10 @@ async function subtitleContent(url: URL): Promise<Response> {
 		);
 	}
 	try {
-		return new Response(await fetchSubtitleContent(rawUrl), {
+		const content = await fetchSubtitleContent(rawUrl);
+		const body = new ArrayBuffer(content.byteLength);
+		new Uint8Array(body).set(content);
+		return new Response(body, {
 			headers: {
 				"cache-control": "private, max-age=300",
 				"content-type": "text/vtt; charset=utf-8",

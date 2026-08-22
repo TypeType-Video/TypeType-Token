@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { IntegrityTokenData } from "bgutils-js";
+import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { SessionTokenResult, TokenResult } from "../src/token-service.ts";
 
 const VISITOR_DATA = "visitor-data-test-123";
@@ -51,6 +51,7 @@ let fetchSessionPoTokens: (
 
 describe("fetchPoToken", () => {
 	beforeAll(async () => {
+		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const module = await import("../src/token-service.ts?token-service-test");
 		fetchPoToken = module.fetchPoToken;
 		fetchSessionPoTokens = module.fetchSessionPoTokens;

@@ -24,7 +24,8 @@ export async function applyRemoteLoginInput(
 		return "applied";
 	}
 	await page.mouse.move(message.x, message.y);
-	if (message.event === "down") await page.mouse.down({ button: message.button });
-	if (message.event === "up") await page.mouse.up({ button: message.button });
+	const button = message.button ? { button: message.button } : undefined;
+	if (message.event === "down") await page.mouse.down(button);
+	if (message.event === "up") await page.mouse.up(button);
 	return "applied";
 }

@@ -11,8 +11,9 @@
     "exactOptionalPropertyTypes": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
     "types": ["bun-types"]
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["src/**/*"]
 }

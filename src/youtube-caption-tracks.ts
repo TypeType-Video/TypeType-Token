@@ -113,7 +113,7 @@ function toRawCaptionTrack(track: CaptionTrackData, client: YoutubeSabrClient): 
 		).toString(),
 		name: { simpleText: track.name.toString() },
 		languageCode: track.language_code,
-		kind: track.kind,
+		...(track.kind ? { kind: track.kind } : {}),
 		vssId: track.vss_id,
 	};
 }
