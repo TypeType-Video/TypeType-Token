@@ -5,6 +5,7 @@ import { applyRemoteLoginInput } from "./remote-login-input.ts";
 import {
 	errorMessage,
 	parseRemoteLoginInput,
+	type RemoteLoginInput,
 	type RemoteLoginPhase,
 	statusMessage,
 } from "./remote-login-messages.ts";
@@ -32,6 +33,8 @@ export class RemoteLoginSession {
 	private expiryTimer: ReturnType<typeof setTimeout>;
 	private frameTimer: ReturnType<typeof setTimeout> | null = null;
 	private loginTimer: ReturnType<typeof setTimeout> | null = null;
+	private readonly inputQueue: RemoteLoginInput[] = [];
+	private inputDrainRunning = false;
 	constructor(options: RemoteLoginSessionOptions) {
 		this.sessionId = options.sessionId;
 		this.userId = options.userId;
@@ -68,7 +71,7 @@ export class RemoteLoginSession {
 		if (this.closed || typeof raw !== "string") return;
 		const message = parseRemoteLoginInput(raw);
 		if (!message) return;
-		void this.applyInput(message);
+		this.enqueueInput(message);
 	}
 	disconnect(): void {
 		this.fail("WebSocket disconnected");
@@ -81,6 +84,42 @@ export class RemoteLoginSession {
 		const page = this.page?.page;
 		if (!page) return;
 		if ((await applyRemoteLoginInput(page, message)) === "cancelled") this.cancel();
+	}
+	private enqueueInput(message: RemoteLoginInput): void {
+		if (message.type === "cancel") {
+			this.inputQueue.length = 0;
+			this.inputQueue.unshift(message);
+		} else if (message.type === "pointer" && message.event === "move") {
+			const last = this.inputQueue.at(-1);
+			if (last?.type === "pointer" && last.event === "move") {
+				this.inputQueue[this.inputQueue.length - 1] = message;
+			} else if (this.inputQueue.length < MAX_INPUT_QUEUE) {
+				this.inputQueue.push(message);
+			}
+		} else {
+			if (this.inputQueue.length >= MAX_INPUT_QUEUE) {
+				const moveIndex = this.inputQueue.findIndex(
+					(input) => input.type === "pointer" && input.event === "move",
+				);
+				if (moveIndex >= 0) this.inputQueue.splice(moveIndex, 1);
+			}
+			if (this.inputQueue.length < MAX_INPUT_QUEUE) this.inputQueue.push(message);
+		}
+		void this.drainInputQueue();
+	}
+	private async drainInputQueue(): Promise<void> {
+		if (this.inputDrainRunning) return;
+		this.inputDrainRunning = true;
+		try {
+			while (!this.closed) {
+				const message = this.inputQueue.shift();
+				if (!message) return;
+				await this.applyInput(message);
+			}
+		} finally {
+			this.inputDrainRunning = false;
+			if (!this.closed && this.inputQueue.length > 0) void this.drainInputQueue();
+		}
 	}
 	private scheduleLoginCheck(): void {
 		if (this.closed || this.captureStarted) return;
@@ -157,6 +196,7 @@ export class RemoteLoginSession {
 	private finish(code: number, reason: string): void {
 		if (this.closed) return;
 		this.closed = true;
+		this.inputQueue.length = 0;
 		clearTimeout(this.expiryTimer);
 		if (this.frameTimer) clearTimeout(this.frameTimer);
 		if (this.loginTimer) clearTimeout(this.loginTimer);
@@ -165,3 +205,5 @@ export class RemoteLoginSession {
 		this.onDone(this.sessionId, this.userId);
 	}
 }
+
+const MAX_INPUT_QUEUE = 128;
