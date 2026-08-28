@@ -1,5 +1,5 @@
 import { buildSabrFormat } from "googlevideo/utils";
-import { YTNodes } from "youtubei.js";
+import { type IPlayerResponse, YTNodes } from "youtubei.js";
 import { KeyedSingleFlight } from "./keyed-single-flight.ts";
 import { fetchPoToken } from "./token-service.ts";
 import { findYoutubeChannelAvatarUrl } from "./youtube-channel-avatar.ts";
@@ -80,7 +80,7 @@ async function fetchYoutubeResponses(
 	const nextEndpoint = new YTNodes.NavigationEndpoint({ watchNextEndpoint: { videoId } });
 	const cachedChannelAvatarUrl = getCachedYoutubeChannelAvatar(videoId);
 	const [videoInfo, nextResponse] = await Promise.all([
-		endpoint.call(innertube.actions, {
+		endpoint.call<IPlayerResponse>(innertube.actions, {
 			...buildYoutubeSabrPlayerRequest(
 				innertube.session.player?.signature_timestamp,
 				poToken,
@@ -100,12 +100,12 @@ async function buildYoutubeSabrSession(
 	client: YoutubeSabrClient,
 	tokens: Awaited<ReturnType<typeof fetchPoToken>>,
 	innertube: YoutubeInnertube,
-	videoInfo: Awaited<ReturnType<YTNodes.NavigationEndpoint["call"]>>,
+	videoInfo: IPlayerResponse,
 	channelAvatarUrl: string,
 ): Promise<YoutubeSabrSession> {
-	const decipheredServerAbrStreamingUrl = await innertube.session.player?.decipher(
-		videoInfo.streaming_data?.server_abr_streaming_url,
-	);
+	const rawServerAbrStreamingUrl = videoInfo.streaming_data?.server_abr_streaming_url;
+	const decipheredServerAbrStreamingUrl =
+		await innertube.session.player?.decipher(rawServerAbrStreamingUrl);
 	const serverAbrStreamingUrl = decipheredServerAbrStreamingUrl
 		? withYoutubeClientVersion(
 				decipheredServerAbrStreamingUrl,
@@ -116,7 +116,7 @@ async function buildYoutubeSabrSession(
 		videoInfo.player_config?.media_common_config.media_ustreamer_request_config
 			?.video_playback_ustreamer_config;
 
-	if (!serverAbrStreamingUrl) {
+	if (!serverAbrStreamingUrl || !rawServerAbrStreamingUrl) {
 		throw new Error("serverAbrStreamingUrl missing from YouTube player response");
 	}
 	if (!videoPlaybackUstreamerConfig) {
@@ -151,7 +151,7 @@ async function buildYoutubeSabrSession(
 		poToken: tokens.visitorBoundPoToken,
 		streamingPot: tokens.streamingPot,
 		serverAbrStreamingUrl,
-		rawServerAbrStreamingUrl: videoInfo.streaming_data.server_abr_streaming_url,
+		rawServerAbrStreamingUrl,
 		hlsManifestUrl: videoInfo.streaming_data?.hls_manifest_url ?? null,
 		videoPlaybackUstreamerConfig,
 		durationMs: metadata.durationMs || null,

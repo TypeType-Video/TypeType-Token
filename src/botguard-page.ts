@@ -56,7 +56,10 @@ export async function executeBotGuard(
 			}
 			config.EVENT_ID = args.eventId;
 			new Function(args.script)();
-			const g = globalThis as Record<string, Record<string, (...a: unknown[]) => unknown>>;
+			const g = globalThis as unknown as Record<
+				string,
+				Record<string, (...a: unknown[]) => unknown>
+			>;
 			const vm = g[args.name];
 			if (!vm?.a) throw new Error("BotGuard VM not found");
 

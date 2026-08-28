@@ -19,7 +19,8 @@ describe("youtubeFetch", () => {
 			if (init?.proxy !== undefined) throw new Error("proxy unavailable");
 			return new Response("direct response");
 		});
-		globalThis.fetch = fetcher as typeof fetch;
+		globalThis.fetch = fetcher as unknown as typeof fetch;
+		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const { youtubeFetch } = await import("../src/youtube-fetch.ts?fail-closed-test");
 
 		await expect(youtubeFetch("https://www.youtube.com")).rejects.toThrow("proxy unavailable");

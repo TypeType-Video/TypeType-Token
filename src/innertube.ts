@@ -1,4 +1,4 @@
-import type { IntegrityTokenData } from "bgutils-js";
+import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import { WEB_CLIENT_VERSION } from "./botguard-challenge.ts";
 import { youtubeFetch } from "./youtube-fetch.ts";
 

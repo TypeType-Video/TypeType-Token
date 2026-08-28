@@ -6,7 +6,7 @@ const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
 const PO_TOKEN = `pot-${VISITOR_DATA}`;
 const mockYoutubeFetch = mock(
-	async (_input: RequestInfo | URL): Promise<Response> =>
+	async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> =>
 		new Response("WEBVTT\n\n00:00.000 --> 00:01.000\nHello", {
 			status: 200,
 			headers: { "content-type": "text/vtt" },
@@ -105,7 +105,11 @@ describe("fetchSubtitles", () => {
 
 	it("skips tracks with missing baseUrl or languageCode", async () => {
 		mockFetchCaptionTracks.mockImplementation(async () => [
-			{ name: { simpleText: "Bad" } },
+			{
+				baseUrl: undefined as unknown as string,
+				languageCode: undefined as unknown as string,
+				name: { simpleText: "Bad" },
+			},
 			frTrack,
 		]);
 		const { fetchSubtitles } = await import("../src/subtitles.ts");

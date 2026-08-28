@@ -60,8 +60,8 @@ function launchOptions(config: RemoteLoginConfig): Parameters<typeof chromium.la
 	return {
 		headless: config.headless,
 		args: launchArgs(config),
-		channel: config.browserChannel ?? undefined,
-		executablePath: config.browserExecutablePath ?? undefined,
+		...(config.browserChannel ? { channel: config.browserChannel } : {}),
+		...(config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}),
 	};
 }
 

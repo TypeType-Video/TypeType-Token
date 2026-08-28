@@ -3,7 +3,7 @@ import type { SubtitleTrack } from "../src/subtitles.ts";
 import type { TokenResult } from "../src/token-service.ts";
 import type { RawCaptionTrack } from "../src/youtube-caption-tracks.ts";
 import type { YoutubePlayerDecodeResponse } from "../src/youtube-player-decoder.ts";
-import type { YoutubeSabrSession } from "../src/youtube-sabr-session.ts";
+import type { YoutubeSabrSession } from "../src/youtube-sabr-types.ts";
 
 const mockFetchPoToken = mock(
 	async (videoId: string, _forceRefresh = false, _refreshVideo = false): Promise<TokenResult> => ({

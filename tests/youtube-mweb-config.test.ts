@@ -31,7 +31,7 @@ describe("YouTube MWEB config", () => {
 			return new Response(configBody("2.20260723.05.00"));
 		};
 
-		await expect(fetchYoutubeMwebConfig(fetcher)).resolves.toEqual({
+		await expect(fetchYoutubeMwebConfig(fetcher as unknown as typeof fetch)).resolves.toEqual({
 			clientVersion: "2.20260723.05.00",
 		});
 		expect(calls[0]?.url).toBe("https://m.youtube.com/sw.js_data");

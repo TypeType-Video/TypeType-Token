@@ -25,9 +25,10 @@ describe("fetchChallenge", () => {
 				`<script>ytcfg.set({"EVENT_ID":"event-123"});` +
 					`window.ytAtN({"R":${JSON.stringify(rawChallenge)}});</script>`,
 			);
-		}) as typeof fetch;
+		}) as unknown as typeof fetch;
 
 		const { fetchChallenge, WEB_CLIENT_VERSION } = await import(
+			// @ts-expect-error Bun uses the query to isolate this module instance.
 			"../src/botguard-challenge.ts?contract-test"
 		);
 		const challenge = await fetchChallenge("visitor-session");
