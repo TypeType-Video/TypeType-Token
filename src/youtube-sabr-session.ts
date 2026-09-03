@@ -9,12 +9,12 @@ import {
 } from "./youtube-channel-avatar-cache.ts";
 import {
 	getYoutubeInnertube,
-	invalidateYoutubeInnertube,
 	isRejectedAnonymousSession,
 	type YoutubeInnertube,
 } from "./youtube-innertube-session.ts";
 import { withYoutubeClientVersion } from "./youtube-mweb-config.ts";
 import { toYoutubeSabrAdaptiveFormat } from "./youtube-sabr-adaptive-format.ts";
+import { youtubeSabrIdentityRefresher } from "./youtube-sabr-identity-refresher.ts";
 import { buildYoutubeSabrPlayerRequest } from "./youtube-sabr-player-request.ts";
 import type { YoutubeSabrClient, YoutubeSabrSession } from "./youtube-sabr-types.ts";
 
@@ -37,7 +37,7 @@ async function loadYoutubeSabrSession(
 	client: YoutubeSabrClient,
 	reloadPlaybackParamsToken?: string,
 ): Promise<YoutubeSabrSession> {
-	const tokens = await fetchPoToken(videoId);
+	let tokens = await fetchPoToken(videoId);
 	let innertube = await getYoutubeInnertube(client, tokens.visitorData);
 	let responses = await fetchYoutubeResponses(
 		videoId,
@@ -47,8 +47,14 @@ async function loadYoutubeSabrSession(
 	);
 	const playability = responses.videoInfo.playability_status;
 	if (isRejectedAnonymousSession(playability?.status, playability?.reason)) {
-		await invalidateYoutubeInnertube(client, tokens.visitorData, innertube);
-		innertube = await getYoutubeInnertube(client, tokens.visitorData);
+		const refreshed = await youtubeSabrIdentityRefresher.refresh(
+			videoId,
+			client,
+			tokens.visitorData,
+			innertube,
+		);
+		tokens = refreshed.tokens;
+		innertube = refreshed.session;
 		responses = await fetchYoutubeResponses(
 			videoId,
 			innertube,
