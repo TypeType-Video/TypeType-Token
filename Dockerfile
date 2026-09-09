@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM oven/bun:1.3.14-slim AS builder
+FROM --platform=$BUILDPLATFORM oven/bun:1.4.2-slim AS builder
 WORKDIR /app
 COPY package.json bun.lock ./
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -6,7 +6,7 @@ RUN bun install --frozen-lockfile
 COPY src/ ./src/
 RUN bun build src/index.ts --outfile dist/index.js --target bun --external playwright
 
-FROM oven/bun:1.3.14-slim AS prod-deps
+FROM oven/bun:1.4.2-slim AS prod-deps
 WORKDIR /app
 COPY package.json bun.lock ./
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -22,7 +22,7 @@ RUN apt-get update \
 	&& apt-get autoremove -y \
 	&& rm -rf /var/lib/apt/lists/* /usr/lib/node_modules
 WORKDIR /app
-COPY --from=oven/bun:1.3.14-slim /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.2-slim /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
