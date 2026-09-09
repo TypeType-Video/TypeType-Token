@@ -16,8 +16,8 @@
   "dependencies": {
     "bgutils-js": "^4.0.3",
     "googlevideo": "^4.1.1",
-    "playwright": "^1.62.1",
-    "youtubei.js": "^17.2.0"
+    "playwright": "^1.63.0",
+    "youtubei.js": "^18.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
