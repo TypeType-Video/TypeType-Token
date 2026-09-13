@@ -108,3 +108,7 @@ export function statusMessage(phase: RemoteLoginPhase): string {
 export function errorMessage(message: string): string {
 	return JSON.stringify({ type: "error", message });
 }
+
+export function logMessage(at: number, message: string): string {
+	return JSON.stringify({ type: "log", at, message });
+}
