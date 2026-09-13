@@ -1,8 +1,10 @@
-import type { Browser, Cookie } from "playwright";
+import type { Browser, Cookie, Frame, Page } from "playwright";
 import { chromium } from "playwright";
 import type { RemoteLoginConfig } from "./remote-login-config.ts";
+import { describeCookies, describeError, describeUrl } from "./remote-login-diagnostics.ts";
 
 const LOGIN_URL = "https://www.youtube.com/signin";
+const YOUTUBE_URL = "https://www.youtube.com";
 const COOKIE_URLS = [
 	"https://www.youtube.com",
 	"https://accounts.google.com",
@@ -46,6 +48,9 @@ export type RemoteLoginPage = {
 	cookies: () => Promise<string>;
 	authUser: () => Promise<number>;
 	hasLoginCookie: () => Promise<boolean>;
+	url: () => string;
+	cookieSummary: () => Promise<string>;
+	observe: (listener: (event: string) => void) => void;
 };
 
 function launchArgs(config: RemoteLoginConfig): string[] {
@@ -88,8 +93,45 @@ function isAllowedCookie(cookie: Cookie): boolean {
 	return false;
 }
 
-function isLoginCookie(cookie: Cookie): boolean {
-	return isAllowedCookie(cookie) && LOGIN_COOKIE_NAMES.has(cookie.name) && cookie.value.length > 0;
+export function isYoutubeLoginCookie(cookie: Cookie): boolean {
+	const domain = cookie.domain.toLowerCase();
+	const youtube = domain === "youtube.com" || domain.endsWith(".youtube.com");
+	return youtube && LOGIN_COOKIE_NAMES.has(cookie.name) && cookie.value.length > 0;
+}
+
+export function isYoutubeUrl(url: string): boolean {
+	try {
+		const host = new URL(url).hostname.toLowerCase();
+		return host === "youtube.com" || host.endsWith(".youtube.com");
+	} catch {
+		return false;
+	}
+}
+
+function observePage(page: Page, listener: (event: string) => void): void {
+	page.on("framenavigated", (frame: Frame) => {
+		if (frame === page.mainFrame()) listener(`navigated ${describeUrl(frame.url())}`);
+	});
+	page.on("response", (response) => {
+		const request = response.request();
+		if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+			listener(`document ${response.status()} ${describeUrl(response.url())}`);
+		}
+	});
+	page.on("requestfailed", (request) => {
+		if (request.isNavigationRequest()) {
+			listener(
+				`navigation failed ${describeUrl(request.url())} ${request.failure()?.errorText ?? ""}`,
+			);
+		}
+	});
+	page.on("dialog", (dialog) => {
+		listener(`dialog ${dialog.type()} dismissed`);
+		void dialog.dismiss().catch(() => undefined);
+	});
+	page.on("pageerror", (error) => listener(`page error ${describeError(error)}`));
+	page.on("crash", () => listener("page crashed"));
+	page.on("close", () => listener("page closed"));
 }
 
 function formatCookie(cookie: Cookie): string {
@@ -156,7 +198,11 @@ export async function createRemoteLoginPage(
 				const value = Number(ytcfg?.get("SESSION_INDEX") ?? 0);
 				return Number.isInteger(value) && value >= 0 && value <= 99 ? value : 0;
 			}),
-		hasLoginCookie: async () => (await context.cookies(COOKIE_URLS)).some(isLoginCookie),
+		hasLoginCookie: async () =>
+			isYoutubeUrl(page.url()) && (await context.cookies(YOUTUBE_URL)).some(isYoutubeLoginCookie),
+		url: () => page.url(),
+		cookieSummary: async () => describeCookies(await context.cookies(COOKIE_URLS)),
+		observe: (listener) => observePage(page, listener),
 	};
 }
 

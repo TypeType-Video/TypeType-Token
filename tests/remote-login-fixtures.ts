@@ -64,6 +64,9 @@ export function fakeRemoteLoginPage(overrides: Partial<RemoteLoginPage> = {}): R
 		cookies: async () => "# Netscape HTTP Cookie File",
 		authUser: async () => 0,
 		hasLoginCookie: async () => false,
+		url: () => "https://www.youtube.com/signin",
+		cookieSummary: async () => "none",
+		observe: () => undefined,
 		...overrides,
 	};
 }
