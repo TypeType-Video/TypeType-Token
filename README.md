@@ -1,10 +1,10 @@
-U want to know the current position of TypeType about AI ? Go check [this](https://github.com/TypeType-Video/TypeType/blob/dev/AI_TRANSPARENCY.md).
-
 <div align="center">
   <img src="https://raw.githubusercontent.com/TypeType-Video/TypeType/main/assets/banner.svg" alt="TypeType" width="100%">
   <h1>TypeType Token</h1>
   <p>YouTube token, decoder, and session service for TypeType-Server.</p>
 </div>
+
+You want to know the current position of TypeType about AI ? Go check [this](https://github.com/TypeType-Video/TypeType/blob/dev/AI_TRANSPARENCY.md).
 
 TypeType-Token is an internal Bun service used exclusively by [TypeType-Server](https://github.com/TypeType-Video/TypeType-Server). It handles YouTube Proof-of-Origin tokens, player decoding, SABR session metadata, subtitles, and disposable remote-login browser sessions.
 
