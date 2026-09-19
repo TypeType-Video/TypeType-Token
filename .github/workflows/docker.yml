@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   prepare:
-    runs-on: [self-hosted, Linux, X64, r730, typetype]
+    runs-on: [self-hosted, Linux, X64, ci-stack]
     outputs:
       build-time: ${{ steps.build-info.outputs.build-time }}
       image: ${{ steps.build-info.outputs.image }}
@@ -104,7 +104,7 @@ jobs:
 
   build-platform:
     needs: prepare
-    runs-on: [self-hosted, Linux, X64, r730, typetype]
+    runs-on: [self-hosted, Linux, X64, ci-stack]
     timeout-minutes: 45
     permissions:
       contents: read
@@ -179,7 +179,7 @@ jobs:
 
   publish:
     needs: [prepare, build-platform]
-    runs-on: [self-hosted, Linux, X64, r730, typetype]
+    runs-on: [self-hosted, Linux, X64, ci-stack]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -239,7 +239,7 @@ jobs:
   notify-orchestrator:
     needs: [prepare, publish]
     if: github.ref_name == 'dev' || github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: [self-hosted, Linux, X64, r730, typetype]
+    runs-on: [self-hosted, Linux, X64, ci-stack]
     permissions:
       contents: read
     env:
