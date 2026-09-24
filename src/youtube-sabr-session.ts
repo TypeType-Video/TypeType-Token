@@ -18,6 +18,7 @@ import { youtubeSabrIdentityRefresher } from "./youtube-sabr-identity-refresher.
 import { createYoutubeSabrPerformance } from "./youtube-sabr-performance.ts";
 import { buildYoutubeSabrPlayerRequest } from "./youtube-sabr-player-request.ts";
 import type { YoutubeSabrClient, YoutubeSabrSession } from "./youtube-sabr-types.ts";
+import { playbackTraceEvent, type PlaybackTraceContext } from "./playback-diagnostics.ts";
 
 const sessionRequests = new KeyedSingleFlight<string, YoutubeSabrSession>();
 const channelAvatarRequests = new KeyedSingleFlight<string, string>();
@@ -27,21 +28,27 @@ export async function fetchYoutubeSabrSession(
 	client: YoutubeSabrClient = "MWEB",
 	reloadPlaybackParamsToken?: string,
 	isolated = false,
+	trace?: PlaybackTraceContext,
 ): Promise<YoutubeSabrSession> {
 	if (reloadPlaybackParamsToken || isolated) {
-		return loadYoutubeSabrSession(videoId, client, reloadPlaybackParamsToken);
+		playbackTraceEvent(trace, "sabr.session.mode", { mode: "isolated" });
+		return loadYoutubeSabrSession(videoId, client, reloadPlaybackParamsToken, trace);
 	}
-	return sessionRequests.run(`${client}:${videoId}`, () => loadYoutubeSabrSession(videoId, client));
+	playbackTraceEvent(trace, "sabr.session.mode", { mode: "singleflight" });
+	return sessionRequests.run(`${client}:${videoId}`, () =>
+		loadYoutubeSabrSession(videoId, client, undefined, trace),
+	);
 }
 
 async function loadYoutubeSabrSession(
 	videoId: string,
 	client: YoutubeSabrClient,
 	reloadPlaybackParamsToken?: string,
+	trace?: PlaybackTraceContext,
 ): Promise<YoutubeSabrSession> {
-	const perf = createYoutubeSabrPerformance(videoId, client);
+	const perf = createYoutubeSabrPerformance(videoId, client, trace);
 	try {
-		let tokens = await perf.measure("poToken", () => fetchPoToken(videoId));
+		let tokens = await perf.measure("poToken", () => fetchPoToken(videoId, false, false, trace));
 
 		let innertube = await perf.measure("innertube", () =>
 			getYoutubeInnertube(client, tokens.visitorData),
@@ -58,7 +65,9 @@ async function loadYoutubeSabrSession(
 		const playability = videoInfo.playability_status;
 		if (isRejectedAnonymousSession(playability?.status, playability?.reason)) {
 			const refreshed = await perf.measure("identityRefresh", () =>
-				youtubeSabrIdentityRefresher.refresh(videoId, client, tokens.visitorData, innertube),
+				youtubeSabrIdentityRefresher.refresh(
+					videoId, client, tokens.visitorData, innertube, trace,
+				),
 			);
 			tokens = refreshed.tokens;
 			innertube = refreshed.session;

@@ -1,4 +1,5 @@
 import { fetchPoToken, type TokenResult } from "./token-service.ts";
+import type { PlaybackTraceContext } from "./playback-diagnostics.ts";
 import {
 	getYoutubeInnertube,
 	invalidateYoutubeInnertube,
@@ -7,7 +8,7 @@ import {
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
 
 type YoutubeSabrIdentityDependencies<Session> = {
-	refreshTokens: (videoId: string) => Promise<TokenResult>;
+	refreshTokens: (videoId: string, trace?: PlaybackTraceContext) => Promise<TokenResult>;
 	getSession: (client: YoutubeSabrClient, visitorData: string) => Promise<Session>;
 	invalidateSession: (
 		client: YoutubeSabrClient,
@@ -24,16 +25,17 @@ export class YoutubeSabrIdentityRefresher<Session> {
 		client: YoutubeSabrClient,
 		rejectedVisitorData: string,
 		rejectedSession: Session,
+		trace?: PlaybackTraceContext,
 	): Promise<{ tokens: TokenResult; session: Session }> {
 		await this.dependencies.invalidateSession(client, rejectedVisitorData, rejectedSession);
-		const tokens = await this.dependencies.refreshTokens(videoId);
+		const tokens = await this.dependencies.refreshTokens(videoId, trace);
 		const session = await this.dependencies.getSession(client, tokens.visitorData);
 		return { tokens, session };
 	}
 }
 
 export const youtubeSabrIdentityRefresher = new YoutubeSabrIdentityRefresher<YoutubeInnertube>({
-	refreshTokens: (videoId) => fetchPoToken(videoId, true),
+	refreshTokens: (videoId, trace) => fetchPoToken(videoId, true, false, trace),
 	getSession: getYoutubeInnertube,
 	invalidateSession: invalidateYoutubeInnertube,
 });

@@ -12,6 +12,7 @@ import { handleSubtitleRequest } from "./subtitle-routes.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
+import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 
 const PORT = 8081;
 const remoteLoginConfig = readRemoteLoginConfig();
@@ -42,13 +43,17 @@ export async function handler(
 		}
 
 		try {
-			const result = await fetchYoutubeSabrSession(
-				videoId,
-				clientParam as YoutubeSabrClient,
-				undefined,
-				url.searchParams.get("isolated") === "true",
-			);
-			return Response.json(result);
+			const trace = playbackTraceFromRequest(req);
+			return await tracePlaybackRequest(trace, "youtube.sabr.session", async () => {
+				const result = await fetchYoutubeSabrSession(
+					videoId,
+					clientParam as YoutubeSabrClient,
+					undefined,
+					url.searchParams.get("isolated") === "true",
+					trace ?? undefined,
+				);
+				return Response.json(result);
+			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Internal error";
 			return Response.json({ error: message }, { status: 500 });
@@ -75,9 +80,17 @@ export async function handler(
 			if (!reloadPlaybackParams || reloadPlaybackParams.length > 8192) {
 				return Response.json({ error: "reloadPlaybackParams is required" }, { status: 400 });
 			}
-			return Response.json(
-				await fetchYoutubeSabrSession(videoId, client as YoutubeSabrClient, reloadPlaybackParams),
-			);
+			const trace = playbackTraceFromRequest(req);
+			return await tracePlaybackRequest(trace, "youtube.sabr.session.reload", async () => {
+				const result = await fetchYoutubeSabrSession(
+					videoId,
+					client as YoutubeSabrClient,
+					reloadPlaybackParams,
+					false,
+					trace ?? undefined,
+				);
+				return Response.json(result);
+			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Internal error";
 			return Response.json({ error: message }, { status: 500 });

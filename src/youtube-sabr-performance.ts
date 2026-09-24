@@ -1,9 +1,14 @@
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
+import { playbackTraceEvent, tracePlaybackPhase, type PlaybackTraceContext } from "./playback-diagnostics.ts";
 
 type Phase = "poToken" | "innertube" | "player" | "identityRefresh" | "sessionBuild";
 type Durations = Record<Phase, number>;
 
-export function createYoutubeSabrPerformance(videoId: string, client: YoutubeSabrClient) {
+export function createYoutubeSabrPerformance(
+	videoId: string,
+	client: YoutubeSabrClient,
+	trace?: PlaybackTraceContext,
+) {
 	const startedAt = performance.now();
 	const durations: Durations = {
 		poToken: 0,
@@ -20,7 +25,7 @@ export function createYoutubeSabrPerformance(videoId: string, client: YoutubeSab
 			stage = phase;
 			const phaseStartedAt = performance.now();
 			try {
-				return await load();
+				return await tracePlaybackPhase(trace, "sabr." + phase, load);
 			} finally {
 				durations[phase] += Math.round(performance.now() - phaseStartedAt);
 			}
@@ -30,6 +35,17 @@ export function createYoutubeSabrPerformance(videoId: string, client: YoutubeSab
 			stage = "complete";
 		},
 		log() {
+			const totalMs = Math.round(performance.now() - startedAt);
+			playbackTraceEvent(trace, "sabr.session.summary", {
+				outcome,
+				stage,
+				poTokenMs: durations.poToken,
+				innertubeMs: durations.innertube,
+				playerMs: durations.player,
+				identityRefreshMs: durations.identityRefresh,
+				sessionBuildMs: durations.sessionBuild,
+				totalMs,
+			});
 			console.info(
 				`[sabr-perf] event=youtube_session videoId=${videoId} client=${client} outcome=${outcome} stage=${stage} poTokenMs=${durations.poToken} innertubeMs=${durations.innertube} playerMs=${durations.player} identityRefreshMs=${durations.identityRefresh} sessionBuildMs=${durations.sessionBuild} totalMs=${Math.round(performance.now() - startedAt)}`,
 			);
