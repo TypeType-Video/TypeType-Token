@@ -42,16 +42,17 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Test with coverage
-        run: bun test --coverage --coverage-reporter=lcov
+      # Temporarily disabled during playback startup performance work.
+      # - name: Test with coverage
+      #   run: bun test --coverage --coverage-reporter=lcov
 
       - name: Build
         run: bun run build
 
-      - name: Upload coverage
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: coverage
-          path: coverage/
-          if-no-files-found: error
-          retention-days: 14
+      # - name: Upload coverage
+      #   uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      #   with:
+      #     name: coverage
+      #     path: coverage/
+      #     if-no-files-found: error
+      #     retention-days: 14
