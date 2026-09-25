@@ -37,7 +37,7 @@ describe("POST /potoken/session", () => {
 			videoBoundPoToken: "video-kids",
 			sessionBoundPoToken: "session-account-visitor",
 		});
-		expect(fetchSessionPoTokens).toHaveBeenCalledWith("kids", "account-visitor", false);
+		expect(fetchSessionPoTokens).toHaveBeenCalledWith("kids", "account-visitor", false, undefined);
 	});
 
 	it("rejects incomplete and oversized bindings", async () => {
