@@ -1,5 +1,5 @@
-import { fetchPoToken, fetchSessionPoTokens } from "./token-service.ts";
 import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
+import { fetchPoToken, fetchSessionPoTokens } from "./token-service.ts";
 
 export async function handlePoTokenRequest(req: Request, url: URL): Promise<Response | null> {
 	if (req.method === "GET" && url.pathname === "/potoken") {

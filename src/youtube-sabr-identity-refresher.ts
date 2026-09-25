@@ -1,5 +1,5 @@
-import { fetchPoToken, type TokenResult } from "./token-service.ts";
 import type { PlaybackTraceContext } from "./playback-diagnostics.ts";
+import { fetchPoToken, type TokenResult } from "./token-service.ts";
 import {
 	getYoutubeInnertube,
 	invalidateYoutubeInnertube,

@@ -1,8 +1,8 @@
 import { mintPoToken } from "./botguard-page.ts";
 import {
+	type PlaybackTraceContext,
 	playbackTraceEvent,
 	tracePlaybackPhase,
-	type PlaybackTraceContext,
 } from "./playback-diagnostics.ts";
 
 const MAX_CACHED_VIDEO_TOKENS = 512;

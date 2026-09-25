@@ -1,5 +1,6 @@
 import type { Server } from "bun";
 import { buildInfo } from "./build-info.ts";
+import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 import { handlePoTokenRequest } from "./po-token-routes.ts";
 import { readRemoteLoginConfig } from "./remote-login-config.ts";
 import { RemoteLoginManager } from "./remote-login-manager.ts";
@@ -12,7 +13,6 @@ import { handleSubtitleRequest } from "./subtitle-routes.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
-import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 
 const PORT = 8081;
 const remoteLoginConfig = readRemoteLoginConfig();

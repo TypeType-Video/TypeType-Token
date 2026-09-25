@@ -1,6 +1,7 @@
 import { buildSabrFormat } from "googlevideo/utils";
 import { type IPlayerResponse, YTNodes } from "youtubei.js";
 import { KeyedSingleFlight } from "./keyed-single-flight.ts";
+import { type PlaybackTraceContext, playbackTraceEvent } from "./playback-diagnostics.ts";
 import { fetchPoToken } from "./token-service.ts";
 import { findYoutubeChannelAvatarUrl } from "./youtube-channel-avatar.ts";
 import {
@@ -18,7 +19,6 @@ import { youtubeSabrIdentityRefresher } from "./youtube-sabr-identity-refresher.
 import { createYoutubeSabrPerformance } from "./youtube-sabr-performance.ts";
 import { buildYoutubeSabrPlayerRequest } from "./youtube-sabr-player-request.ts";
 import type { YoutubeSabrClient, YoutubeSabrSession } from "./youtube-sabr-types.ts";
-import { playbackTraceEvent, type PlaybackTraceContext } from "./playback-diagnostics.ts";
 
 const sessionRequests = new KeyedSingleFlight<string, YoutubeSabrSession>();
 const channelAvatarRequests = new KeyedSingleFlight<string, string>();
@@ -65,9 +65,7 @@ async function loadYoutubeSabrSession(
 		const playability = videoInfo.playability_status;
 		if (isRejectedAnonymousSession(playability?.status, playability?.reason)) {
 			const refreshed = await perf.measure("identityRefresh", () =>
-				youtubeSabrIdentityRefresher.refresh(
-					videoId, client, tokens.visitorData, innertube, trace,
-				),
+				youtubeSabrIdentityRefresher.refresh(videoId, client, tokens.visitorData, innertube, trace),
 			);
 			tokens = refreshed.tokens;
 			innertube = refreshed.session;

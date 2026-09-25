@@ -2,11 +2,15 @@ import { fetchChallenge } from "./botguard-challenge.ts";
 import { executeBotGuard, mintPoToken, resetBotGuardPage } from "./botguard-page.ts";
 import { fetchIntegrityToken, fetchVisitorData } from "./innertube.ts";
 import {
+	type PlaybackTraceContext,
 	playbackTraceEvent,
 	tracePlaybackPhase,
-	type PlaybackTraceContext,
 } from "./playback-diagnostics.ts";
-import { getVideoBoundPoToken, refreshVideoBoundPoToken, type CachedSession } from "./video-bound-po-token.ts";
+import {
+	type CachedSession,
+	getVideoBoundPoToken,
+	refreshVideoBoundPoToken,
+} from "./video-bound-po-token.ts";
 
 const EXPIRY_MARGIN_MS = 10 * 60 * 1000;
 
@@ -21,7 +25,6 @@ export type TokenResult = {
 export type SessionTokenResult = TokenResult & {
 	sessionBoundPoToken: string;
 };
-
 
 let session: CachedSession | null = null;
 let sessionRefreshInFlight: Promise<CachedSession> | null = null;
@@ -66,7 +69,6 @@ async function buildSession(trace?: PlaybackTraceContext): Promise<CachedSession
 		videoBoundPoTokenRequests: new Map(),
 	};
 }
-
 
 function startSessionRefresh(trace?: PlaybackTraceContext): Promise<CachedSession> {
 	const previousSession = session;

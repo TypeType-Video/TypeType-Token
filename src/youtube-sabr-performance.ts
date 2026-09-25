@@ -1,5 +1,9 @@
+import {
+	type PlaybackTraceContext,
+	playbackTraceEvent,
+	tracePlaybackPhase,
+} from "./playback-diagnostics.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
-import { playbackTraceEvent, tracePlaybackPhase, type PlaybackTraceContext } from "./playback-diagnostics.ts";
 
 type Phase = "poToken" | "innertube" | "player" | "identityRefresh" | "sessionBuild";
 type Durations = Record<Phase, number>;
