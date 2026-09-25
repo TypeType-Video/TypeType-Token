@@ -29,6 +29,7 @@ jobs:
       image: ${{ steps.build-info.outputs.image }}
       labels: ${{ steps.meta.outputs.labels }}
       metadata-json: ${{ steps.meta.outputs.json }}
+      platform-matrix: ${{ steps.build-info.outputs.platform-matrix }}
       version: ${{ steps.build-info.outputs.version }}
     steps:
       - name: Checkout
@@ -85,6 +86,12 @@ jobs:
             echo "version=$version"
             echo "build-time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           } >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_NAME" == "dev" ]]; then
+            platform_matrix='{"include":[{"platform":"linux/amd64","arch":"amd64"}]}'
+          else
+            platform_matrix='{"include":[{"platform":"linux/amd64","arch":"amd64"},{"platform":"linux/arm64","arch":"arm64"}]}'
+          fi
+          echo "platform-matrix=$platform_matrix" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata
         id: meta
@@ -111,12 +118,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            arch: amd64
-          - platform: linux/arm64
-            arch: arm64
+      matrix: ${{ fromJSON(needs.prepare.outputs.platform-matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -218,8 +220,10 @@ jobs:
           METADATA_JSON: ${{ needs.prepare.outputs.metadata-json }}
         run: |
           mapfile -t digests < <(find "$DIGEST_DIR" -maxdepth 1 -type f -printf '%f\n' | sort)
-          if [[ "${#digests[@]}" -ne 2 ]]; then
-            echo "Expected two platform digests, found ${#digests[@]}"
+          expected_digests=2
+          if [[ "$GITHUB_REF_NAME" == "dev" ]]; then expected_digests=1; fi
+          if [[ "${#digests[@]}" -ne "$expected_digests" ]]; then
+            echo "Expected $expected_digests platform digests, found ${#digests[@]}"
             exit 1
           fi
           mapfile -t tags < <(jq -r '.tags[]' <<< "$METADATA_JSON")
