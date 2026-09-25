@@ -232,7 +232,13 @@ describe("handler", () => {
 		);
 
 		expect(res.status).toBe(200);
-		expect(mockFetchYoutubeSabrSession.mock.calls.at(-1)).toEqual(["abc", "MWEB", "reload-secret", false, undefined]);
+		expect(mockFetchYoutubeSabrSession.mock.calls.at(-1)).toEqual([
+			"abc",
+			"MWEB",
+			"reload-secret",
+			false,
+			undefined,
+		]);
 		expect(res.url).not.toContain("reload-secret");
 	});
 
