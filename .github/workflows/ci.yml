@@ -1,12 +1,10 @@
 name: CI
 
 on:
-  # Temporarily disabled during playback startup performance work.
-  # push:
-  #   branches: ["dev", "main"]
-  # pull_request:
-  #   branches: ["dev", "main"]
-  workflow_dispatch:
+  push:
+    branches: ["dev", "main"]
+  pull_request:
+    branches: ["dev", "main"]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -44,17 +42,16 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      # Temporarily disabled during playback startup performance work.
-      # - name: Test with coverage
-      #   run: bun test --coverage --coverage-reporter=lcov
+      - name: Test with coverage
+        run: bun test --coverage --coverage-reporter=lcov
 
       - name: Build
         run: bun run build
 
-      # - name: Upload coverage
-      #   uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      #   with:
-      #     name: coverage
-      #     path: coverage/
-      #     if-no-files-found: error
-      #     retention-days: 14
+      - name: Upload coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: error
+          retention-days: 14
