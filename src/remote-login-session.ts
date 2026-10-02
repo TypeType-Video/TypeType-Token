@@ -15,6 +15,7 @@ import type {
 	RemoteLoginPageFactory,
 	RemoteLoginSessionOptions,
 } from "./remote-login-session-types.ts";
+import { isYoutubeOopsUrl } from "./remote-login-url.ts";
 
 const SCREENSHOT_FAILURE_LOG_EVERY = 20;
 
@@ -34,6 +35,7 @@ export class RemoteLoginSession {
 	private closed = false;
 	private captureStarted = false;
 	private lastLoginState = "";
+	private oopsHandshakeRetried = false;
 	private screenshotFailures = 0;
 	private expiryTimer: ReturnType<typeof setTimeout>;
 	private frameTimer: ReturnType<typeof setTimeout> | null = null;
@@ -115,6 +117,21 @@ export class RemoteLoginSession {
 			if (await this.page.hasLoginCookie()) {
 				void this.captureSession();
 			} else {
+				if (
+					isYoutubeOopsUrl(this.page.url()) &&
+					!this.oopsHandshakeRetried &&
+					(await this.page.hasGoogleLoginCookie())
+				) {
+					this.oopsHandshakeRetried = true;
+					this.diagnostics.log(
+						"detected youtube.com/oops after google authentication, automatically retrying youtube signin handshake",
+					);
+					await this.page
+						.retrySignInHandshake()
+						.catch((err) =>
+							this.diagnostics.log(`oops handshake retry failed: ${describeError(err)}`),
+						);
+				}
 				this.scheduleLoginCheck();
 			}
 		} catch (error) {

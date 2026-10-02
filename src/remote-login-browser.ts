@@ -48,6 +48,8 @@ export type RemoteLoginPage = {
 	cookies: () => Promise<string>;
 	authUser: () => Promise<number>;
 	hasLoginCookie: () => Promise<boolean>;
+	hasGoogleLoginCookie: () => Promise<boolean>;
+	retrySignInHandshake: () => Promise<void>;
 	url: () => string;
 	cookieSummary: () => Promise<string>;
 	observe: (listener: (event: string) => void) => void;
@@ -97,6 +99,12 @@ export function isYoutubeLoginCookie(cookie: Cookie): boolean {
 	const domain = cookie.domain.toLowerCase();
 	const youtube = domain === "youtube.com" || domain.endsWith(".youtube.com");
 	return youtube && LOGIN_COOKIE_NAMES.has(cookie.name) && cookie.value.length > 0;
+}
+
+export function isGoogleLoginCookie(cookie: Cookie): boolean {
+	const domain = cookie.domain.toLowerCase();
+	const google = domain === "google.com" || domain.endsWith(".google.com");
+	return google && LOGIN_COOKIE_NAMES.has(cookie.name) && cookie.value.length > 0;
 }
 
 export function isYoutubeUrl(url: string): boolean {
@@ -171,12 +179,59 @@ function capturePot(url: string): string | null {
 	return pot && pot.length > 0 ? pot : null;
 }
 
+type WebAuthnTarget = {
+	PublicKeyCredential?: {
+		isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean>;
+		isConditionalMediationAvailable?: () => Promise<boolean>;
+	};
+	navigator?: {
+		credentials?: {
+			get?: (options?: CredentialRequestOptions) => Promise<Credential | null>;
+			create?: (options?: CredentialCreationOptions) => Promise<Credential | null>;
+		};
+	};
+};
+
+export function installWebAuthnBypassOverrides(target: WebAuthnTarget = globalThis): void {
+	try {
+		if (target.PublicKeyCredential) {
+			target.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = () =>
+				Promise.resolve(false);
+			target.PublicKeyCredential.isConditionalMediationAvailable = () => Promise.resolve(false);
+		}
+		if (target.navigator?.credentials) {
+			const creds = target.navigator.credentials;
+			const originalGet = creds.get?.bind(creds);
+			const originalCreate = creds.create?.bind(creds);
+
+			creds.get = (options?: CredentialRequestOptions) => {
+				if (options?.publicKey) {
+					return Promise.reject(
+						new DOMException("The operation is not supported.", "NotSupportedError"),
+					);
+				}
+				return originalGet ? originalGet(options) : Promise.resolve(null);
+			};
+
+			creds.create = (options?: CredentialCreationOptions) => {
+				if (options?.publicKey) {
+					return Promise.reject(
+						new DOMException("The operation is not supported.", "NotSupportedError"),
+					);
+				}
+				return originalCreate ? originalCreate(options) : Promise.resolve(null);
+			};
+		}
+	} catch {}
+}
+
 export async function createRemoteLoginPage(
 	config: RemoteLoginConfig,
 	onPoToken: (poToken: string) => void,
 ): Promise<RemoteLoginPage> {
 	const browser = await ensureRemoteBrowser(config);
 	const context = await browser.newContext(contextOptions(config));
+	await context.addInitScript(installWebAuthnBypassOverrides);
 	const page = await context.newPage();
 	page.on("request", (request) => {
 		const poToken = capturePot(request.url());
@@ -200,6 +255,11 @@ export async function createRemoteLoginPage(
 			}),
 		hasLoginCookie: async () =>
 			isYoutubeUrl(page.url()) && (await context.cookies(YOUTUBE_URL)).some(isYoutubeLoginCookie),
+		hasGoogleLoginCookie: async () =>
+			(await context.cookies(COOKIE_URLS)).some(isGoogleLoginCookie),
+		retrySignInHandshake: async () => {
+			await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+		},
 		url: () => page.url(),
 		cookieSummary: async () => describeCookies(await context.cookies(COOKIE_URLS)),
 		observe: (listener) => observePage(page, listener),

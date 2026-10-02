@@ -93,4 +93,38 @@ describe("RemoteLoginSession diagnostics", () => {
 		expect(logs(sent)).toContain("input text 3 chars failed: Execution context was destroyed");
 		expect(logs(sent)).toContain("session failed: Remote browser input failed");
 	});
+
+	it("automatically retries YouTube sign-in handshake when landing on youtube.com/oops with Google login cookies", async () => {
+		let retried = false;
+		let currentUrl = "https://www.youtube.com/oops";
+		let youtubeLogin = false;
+		const page = fakeRemoteLoginPage({
+			url: () => currentUrl,
+			hasLoginCookie: async () => youtubeLogin,
+			hasGoogleLoginCookie: async () => true,
+			retrySignInHandshake: async () => {
+				retried = true;
+				currentUrl = "https://www.youtube.com/";
+				youtubeLogin = true;
+			},
+		});
+		const session = new RemoteLoginSession({
+			sessionId: "test-oops-session",
+			userId: "user",
+			expiresAt: Date.now() + 300_000,
+			target: remoteLoginTarget(),
+			config: remoteLoginTestConfig(),
+			createPage: async () => page,
+			onDone: () => undefined,
+		});
+		await session.start();
+		const sent: string[] = [];
+		session.attach(connection(sent));
+		await waitFor(1100);
+		expect(retried).toBe(true);
+		expect(logs(sent)).toContain(
+			"detected youtube.com/oops after google authentication, automatically retrying youtube signin handshake",
+		);
+		session.cancel();
+	});
 });
