@@ -4,8 +4,8 @@ import { REMOTE_LOGIN_INTERNAL_HEADER } from "../src/remote-login-config.ts";
 import { remoteLoginTarget, remoteLoginTestConfig } from "./remote-login-fixtures.ts";
 
 describe("sendRemoteLoginCompletion", () => {
-	it("returns false when the internal token is missing", async () => {
-		const ok = await sendRemoteLoginCompletion(
+	it("reports a missing internal token", async () => {
+		const result = await sendRemoteLoginCompletion(
 			remoteLoginTarget(),
 			"token-session",
 			"# Netscape HTTP Cookie File",
@@ -14,7 +14,7 @@ describe("sendRemoteLoginCompletion", () => {
 			remoteLoginTestConfig({ internalToken: null }),
 		);
 
-		expect(ok).toBe(false);
+		expect(result).toMatchObject({ ok: false, reason: "internal_token_missing" });
 	});
 
 	it("posts the completion payload to TypeType-Server", async () => {
@@ -38,7 +38,7 @@ describe("sendRemoteLoginCompletion", () => {
 			const config = remoteLoginTestConfig({
 				callbackOrigin: `http://localhost:${server.port}`,
 			});
-			const ok = await sendRemoteLoginCompletion(
+			const result = await sendRemoteLoginCompletion(
 				remoteLoginTarget({
 					callbackUrl: `http://localhost:${server.port}/callback`,
 				}),
@@ -49,7 +49,7 @@ describe("sendRemoteLoginCompletion", () => {
 				config,
 			);
 
-			expect(ok).toBe(true);
+			expect(result).toMatchObject({ ok: true, status: 200 });
 			expect(header).toBe("internal-secret");
 			expect(payload?.sessionId).toBe("server-session");
 			expect(payload?.tokenSessionId).toBe("token-session");
@@ -57,6 +57,59 @@ describe("sendRemoteLoginCompletion", () => {
 			expect(payload?.authUser).toBe(2);
 		} finally {
 			server.stop(true);
+		}
+	});
+
+	it("returns the callback HTTP status when the server rejects completion", async () => {
+		const server = Bun.serve({
+			port: 0,
+			fetch: async () => Response.json({ error: "rejected" }, { status: 400 }),
+		});
+
+		try {
+			const result = await sendRemoteLoginCompletion(
+				remoteLoginTarget({
+					callbackUrl: `http://localhost:${server.port}/callback`,
+				}),
+				"token-session",
+				"# Netscape HTTP Cookie File",
+				"captured-pot",
+				2,
+				remoteLoginTestConfig({ callbackOrigin: `http://localhost:${server.port}` }),
+			);
+
+			expect(result).toMatchObject({ ok: false, reason: "http_error", status: 400 });
+		} finally {
+			server.stop(true);
+		}
+	});
+
+	it("reports safe network error details without including the error message", async () => {
+		const originalFetch = globalThis.fetch;
+		globalThis.fetch = async () => {
+			const cause = Object.assign(new Error("private endpoint details"), { code: "ECONNRESET" });
+			throw new TypeError("fetch failed", { cause });
+		};
+
+		try {
+			const result = await sendRemoteLoginCompletion(
+				remoteLoginTarget(),
+				"token-session",
+				"# Netscape HTTP Cookie File",
+				"captured-pot",
+				2,
+				remoteLoginTestConfig(),
+			);
+
+			expect(result).toMatchObject({
+				ok: false,
+				reason: "network_error",
+				errorName: "TypeError",
+				errorCode: "ECONNRESET",
+			});
+			expect(JSON.stringify(result)).not.toContain("private endpoint details");
+		} finally {
+			globalThis.fetch = originalFetch;
 		}
 	});
 });

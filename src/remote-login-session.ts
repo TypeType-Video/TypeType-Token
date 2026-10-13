@@ -167,7 +167,9 @@ export class RemoteLoginSession {
 		this.diagnostics.log(
 			`captured cookies=${cookies.split("\n").length - 1} lines bytes=${cookies.length} authUser=${authUser} poToken=${poToken.length} chars`,
 		);
-		const sent = await sendRemoteLoginCompletion(
+		const serverSessionId = this.target.serverSessionId.slice(0, 8);
+		this.diagnostics.log(`completion callback started serverSession=${serverSessionId}`);
+		const result = await sendRemoteLoginCompletion(
 			this.target,
 			this.sessionId,
 			cookies,
@@ -175,8 +177,22 @@ export class RemoteLoginSession {
 			authUser,
 			this.config,
 		);
-		this.diagnostics.log(`completion callback ${sent ? "accepted" : "rejected"} by server`);
-		if (!sent || this.closed) return this.fail("Completion callback failed");
+		if (!result.ok) {
+			const details =
+				result.reason === "http_error"
+					? ` status=${result.status}`
+					: "errorName" in result
+						? ` error=${result.errorName} errorCode=${result.errorCode ?? "unknown"}`
+						: "";
+			this.diagnostics.log(
+				`completion callback rejected reason=${result.reason}${details} durationMs=${result.durationMs} serverSession=${serverSessionId}`,
+			);
+			return this.fail("Completion callback failed");
+		}
+		this.diagnostics.log(
+			`completion callback accepted status=${result.status} durationMs=${result.durationMs} serverSession=${serverSessionId}`,
+		);
+		if (this.closed) return this.fail("Completion callback failed");
 		this.setPhase("connected");
 		setTimeout(() => this.finish(1000, "Connected"), 50);
 	}
