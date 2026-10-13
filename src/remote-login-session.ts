@@ -177,7 +177,7 @@ export class RemoteLoginSession {
 			authUser,
 			this.config,
 		);
-		if (!result.ok) {
+		if (result.ok === false) {
 			const details =
 				result.reason === "http_error"
 					? ` status=${result.status}`

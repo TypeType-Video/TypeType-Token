@@ -85,11 +85,15 @@ describe("sendRemoteLoginCompletion", () => {
 	});
 
 	it("reports safe network error details without including the error message", async () => {
-		const originalFetch = globalThis.fetch;
-		globalThis.fetch = async () => {
-			const cause = Object.assign(new Error("private endpoint details"), { code: "ECONNRESET" });
-			throw new TypeError("fetch failed", { cause });
-		};
+		const originalFetch = Object.getOwnPropertyDescriptor(globalThis, "fetch");
+		Object.defineProperty(globalThis, "fetch", {
+			configurable: true,
+			writable: true,
+			value: async () => {
+				const cause = Object.assign(new Error("private endpoint details"), { code: "ECONNRESET" });
+				throw new TypeError("fetch failed", { cause });
+			},
+		});
 
 		try {
 			const result = await sendRemoteLoginCompletion(
@@ -109,7 +113,7 @@ describe("sendRemoteLoginCompletion", () => {
 			});
 			expect(JSON.stringify(result)).not.toContain("private endpoint details");
 		} finally {
-			globalThis.fetch = originalFetch;
+			if (originalFetch) Object.defineProperty(globalThis, "fetch", originalFetch);
 		}
 	});
 });
