@@ -75,7 +75,7 @@ export type RemoteLoginCompletionResult =
 			errorName: string;
 			errorCode: string | null;
 			durationMs: number;
-		};
+	  };
 
 function safeErrorName(error: unknown): string {
 	if (!(error instanceof Error)) return "UnknownError";
