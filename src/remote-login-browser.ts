@@ -266,6 +266,49 @@ export async function createRemoteLoginPage(
 	};
 }
 
+export async function createCookieImportPage(
+	config: RemoteLoginConfig,
+	cookies: Cookie[],
+	onPoToken: (poToken: string) => void,
+): Promise<RemoteLoginPage> {
+	const browser = await ensureRemoteBrowser(config);
+	const context = await browser.newContext(contextOptions(config));
+	await context.addInitScript(installWebAuthnBypassOverrides);
+	await context.addCookies(cookies);
+	const page = await context.newPage();
+	page.on("request", (request) => {
+		const poToken = capturePot(request.url());
+		if (poToken) onPoToken(poToken);
+	});
+	await page.goto(config.probeVideoUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+	return {
+		page,
+		close: () => context.close().catch(() => undefined),
+		cookies: async () =>
+			formatNetscapeCookies(await context.cookies(COOKIE_URLS), config.maxCookieBytes),
+		authUser: async () =>
+			page.evaluate(() => {
+				const ytcfg = (
+					globalThis as typeof globalThis & {
+						ytcfg?: { get: (key: string) => unknown };
+					}
+				).ytcfg;
+				const value = Number(ytcfg?.get("SESSION_INDEX") ?? 0);
+				return Number.isInteger(value) && value >= 0 && value <= 99 ? value : 0;
+			}),
+		hasLoginCookie: async () =>
+			isYoutubeUrl(page.url()) && (await context.cookies(YOUTUBE_URL)).some(isYoutubeLoginCookie),
+		hasGoogleLoginCookie: async () =>
+			(await context.cookies(COOKIE_URLS)).some(isGoogleLoginCookie),
+		retrySignInHandshake: async () => {
+			await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+		},
+		url: () => page.url(),
+		cookieSummary: async () => describeCookies(await context.cookies(COOKIE_URLS)),
+		observe: (listener) => observePage(page, listener),
+	};
+}
+
 export async function probeRemoteLoginBrowser(config: RemoteLoginConfig): Promise<void> {
 	const browser = await ensureRemoteBrowser(config);
 	const context = await browser.newContext(contextOptions(config));

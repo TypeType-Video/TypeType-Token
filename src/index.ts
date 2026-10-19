@@ -9,6 +9,7 @@ import {
 	createRemoteLoginHandler,
 	type RemoteLoginWebSocketData,
 } from "./remote-login-routes.ts";
+import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
@@ -30,6 +31,22 @@ export async function handler(
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
 	if (poTokenResponse !== null) return poTokenResponse;
+
+	if (req.method === "POST" && url.pathname === "/session-binding") {
+		const body = (await req.json().catch(() => null)) as { cookies?: unknown } | null;
+		const cookies = typeof body?.cookies === "string" ? body.cookies : "";
+		if (!cookies.trim()) return Response.json({ error: "cookies are required" }, { status: 400 });
+		const result = await importSessionBinding(remoteLoginConfig, cookies);
+		if (result.ok === false) {
+			const status = result.reason === "invalid_cookies" ? 400 : 422;
+			return Response.json({ error: result.reason }, { status });
+		}
+		return Response.json({
+			cookies: result.cookies,
+			poToken: result.poToken,
+			authUser: result.authUser,
+		});
+	}
 
 	if (req.method === "GET" && url.pathname === "/youtube/sabr/session") {
 		const videoId = url.searchParams.get("videoId");
