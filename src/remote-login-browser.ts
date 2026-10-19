@@ -280,8 +280,14 @@ export async function createCookieImportPage(
 		const poToken = capturePot(request.url());
 		if (poToken) onPoToken(poToken);
 	});
-	await page.goto(config.probeVideoUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
-	await page.waitForSelector("video", { timeout: 15_000 }).catch(() => undefined);
+	const probeUrl = new URL(config.probeVideoUrl);
+	if (probeUrl.hostname === "music.youtube.com") probeUrl.hostname = "www.youtube.com";
+	await page.goto(probeUrl.toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
+	await page.waitForSelector("video", { timeout: 20_000 }).catch(() => undefined);
+	await page
+		.locator("button.ytp-large-play-button")
+		.click({ timeout: 3_000 })
+		.catch(() => undefined);
 	await page
 		.evaluate(() => {
 			const video = document.querySelector("video");
