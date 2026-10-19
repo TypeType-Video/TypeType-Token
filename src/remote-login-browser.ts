@@ -281,6 +281,15 @@ export async function createCookieImportPage(
 		if (poToken) onPoToken(poToken);
 	});
 	await page.goto(config.probeVideoUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+	await page.waitForSelector("video", { timeout: 15_000 }).catch(() => undefined);
+	await page
+		.evaluate(() => {
+			const video = document.querySelector("video");
+			if (!video) return;
+			video.muted = true;
+			void video.play().catch(() => undefined);
+		})
+		.catch(() => undefined);
 	return {
 		page,
 		close: () => context.close().catch(() => undefined),
