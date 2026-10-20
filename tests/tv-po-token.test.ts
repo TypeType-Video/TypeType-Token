@@ -1,45 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { parseTvAppInfo, parseTvChallenge } from "../src/tv-po-token.ts";
+import { parseIntegrityToken, parseRequestKey, parseTvAppInfo } from "../src/tv-po-token.ts";
 
 const PAGE =
-	'<script>{"LIVING_ROOM_PO_TOKEN_ID":"wpeaWfYpTp8\\u003d","visitorData":"Cgs5azZUVjRo"}</script>';
+	'<script>{"EVENT_ID":"3vPWarn6NobmmLAP58-A0AI","LIVING_ROOM_PO_TOKEN_ID":"wpeaWfYpTp8\\u003d","visitorData":"Cgs5azZUVjRo"}</script>';
 
-function configFor(challenge: unknown): string {
-	const escaped = JSON.stringify(JSON.stringify(challenge)).slice(1, -1);
-	return `{"challengeRequestKey":"Z1elNkAKLpSR3oPOUMSN","challengeParams":{"R":"${escaped}","T":1}}`;
-}
-
-describe("tv po token parsing", () => {
-	test("reads the living room id and visitor data", () => {
+describe("tv po token", () => {
+	test("reads the living room id, visitor data and event id", () => {
 		expect(parseTvAppInfo(PAGE)).toEqual({
 			livingRoomPoTokenId: "wpeaWfYpTp8=",
 			visitorData: "Cgs5azZUVjRo",
+			eventId: "3vPWarn6NobmmLAP58-A0AI",
 		});
 	});
 
 	test("rejects a page without the living room id", () => {
-		expect(parseTvAppInfo('{"visitorData":"x"}')).toBeNull();
+		expect(parseTvAppInfo('{"visitorData":"x","EVENT_ID":"y"}')).toBeNull();
 	});
 
-	test("reads the BotGuard challenge from tv_config", () => {
-		const config = configFor({
-			bgChallenge: {
-				program: "program",
-				globalName: "trayride",
-				interpreterUrl: {
-					privateDoNotAccessOrElseTrustedResourceUrlWrappedValue: "//example/interp.js",
-				},
-			},
-		});
-
-		expect(parseTvChallenge(config)).toEqual({
-			program: "program",
-			globalName: "trayride",
-			interpreterUrl: "//example/interp.js",
-		});
+	test("reads the challenge request key", () => {
+		expect(parseRequestKey('{"challengeRequestKey":"Z1elNkAKLpSR3oPOUMSN"}')).toBe(
+			"Z1elNkAKLpSR3oPOUMSN",
+		);
+		expect(parseRequestKey('{"other":1}')).toBeNull();
 	});
 
-	test("rejects a config without a challenge", () => {
-		expect(parseTvChallenge('{"challengeRequestKey":"x"}')).toBeNull();
+	test("prefers the integrity token and falls back to the websafe token", () => {
+		expect(parseIntegrityToken({ integrityToken: "a", estimatedTtlSecs: 60 })).toEqual({
+			token: "a",
+			ttlSecs: 60,
+		});
+		expect(parseIntegrityToken({ websafeFallbackToken: "b" })?.token).toBe("b");
+		expect(parseIntegrityToken({})).toBeNull();
 	});
 });

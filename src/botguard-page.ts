@@ -6,23 +6,25 @@ const ROUTE = "https://www.youtube.com/__bgp__";
 const BLANK_HTML = "<!DOCTYPE html><html><body></body></html>";
 
 let browser: Browser | null = null;
-let page: Page | null = null;
+const pages = new Map<string, Page>();
 
-async function ensurePage(): Promise<Page> {
+async function ensurePage(userAgent: string = WEB_USER_AGENT): Promise<Page> {
 	if (!browser) {
 		browser = await chromium.launch({
 			headless: false,
 			args: ["--disable-blink-features=AutomationControlled"],
 		});
 	}
-	if (!page || page.isClosed()) {
-		page = await browser.newPage({ userAgent: WEB_USER_AGENT });
-		await page.route(ROUTE, (route) =>
+	let active = pages.get(userAgent);
+	if (!active || active.isClosed()) {
+		active = await browser.newPage({ userAgent });
+		await active.route(ROUTE, (route) =>
 			route.fulfill({ contentType: "text/html", body: BLANK_HTML }),
 		);
-		await page.goto(ROUTE);
+		await active.goto(ROUTE);
+		pages.set(userAgent, active);
 	}
-	return page;
+	return active;
 }
 
 type BotGuardArgs = { script: string; prog: string; name: string; eventId: string };
@@ -39,8 +41,9 @@ export async function executeBotGuard(
 	program: string,
 	globalName: string,
 	eventId: string,
+	userAgent?: string,
 ): Promise<string> {
-	const p = await ensurePage();
+	const p = await ensurePage(userAgent);
 	return p.evaluate(
 		async (args: BotGuardArgs): Promise<string> => {
 			const root = globalThis as Record<string, unknown>;
@@ -105,8 +108,12 @@ export async function executeBotGuard(
 	);
 }
 
-export async function mintPoToken(integrityToken: string, identifier: string): Promise<string> {
-	const p = await ensurePage();
+export async function mintPoToken(
+	integrityToken: string,
+	identifier: string,
+	userAgent?: string,
+): Promise<string> {
+	const p = await ensurePage(userAgent);
 	return p.evaluate(
 		async (args: MintArgs): Promise<string> => {
 			const g = globalThis as PoTokenGlobal;
@@ -142,6 +149,8 @@ export async function mintPoToken(integrityToken: string, identifier: string): P
 }
 
 export async function resetBotGuardPage(): Promise<void> {
-	if (page && !page.isClosed()) await page.close();
-	page = null;
+	for (const active of pages.values()) {
+		if (!active.isClosed()) await active.close();
+	}
+	pages.clear();
 }

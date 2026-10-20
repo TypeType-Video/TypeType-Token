@@ -7,6 +7,8 @@ const TV_USER_AGENT =
 const TV_PAGE_URL = "https://www.youtube.com/tv";
 const TV_CONFIG_URL =
 	"https://www.youtube.com/tv_config?action_get_config=true&client=lb4&theme=cl";
+const WAA_BASE = "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa";
+const GOOG_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
 const TTL_MS = 10 * 60_000;
 
 export type TvPoToken = {
@@ -19,18 +21,24 @@ export type TvPoToken = {
 export type TvAppInfo = {
 	livingRoomPoTokenId: string;
 	visitorData: string;
+	eventId: string;
 };
 
 export type TvChallenge = {
 	program: string;
 	globalName: string;
-	interpreterUrl: string;
+	interpreterScript: string;
 };
 
 export function parseTvAppInfo(html: string): TvAppInfo | null {
 	const id = /"LIVING_ROOM_PO_TOKEN_ID":"(.*?)"/.exec(html)?.[1]?.replaceAll("\\u003d", "=");
 	const visitorData = /"visitorData":"(.*?)"/.exec(html)?.[1];
-	return id && visitorData ? { livingRoomPoTokenId: id, visitorData } : null;
+	const eventId = /"EVENT_ID":"(.*?)"/.exec(html)?.[1];
+	return id && visitorData && eventId ? { livingRoomPoTokenId: id, visitorData, eventId } : null;
+}
+
+export function parseRequestKey(config: string): string | null {
+	return /"challengeRequestKey":"(.*?)"/.exec(config)?.[1] ?? null;
 }
 
 export function parseTvChallenge(config: string): TvChallenge | null {
@@ -41,18 +49,27 @@ export function parseTvChallenge(config: string): TvChallenge | null {
 		const background = JSON.parse(challenge).bgChallenge as {
 			program?: unknown;
 			globalName?: unknown;
-			interpreterUrl?: Record<string, unknown>;
+			interpreterJavascript?: Record<string, unknown>;
 		};
 		const program = background.program;
 		const globalName = background.globalName;
-		const interpreterUrl =
-			background.interpreterUrl?.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue;
+		const interpreterScript =
+			background.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
 		if (typeof program !== "string" || typeof globalName !== "string") return null;
-		if (typeof interpreterUrl !== "string" || !interpreterUrl) return null;
-		return { program, globalName, interpreterUrl };
+		if (typeof interpreterScript !== "string" || !interpreterScript) return null;
+		return { program, globalName, interpreterScript };
 	} catch {
 		return null;
 	}
+}
+
+export function parseIntegrityToken(payload: unknown): { token: string; ttlSecs: number } | null {
+	if (!payload || typeof payload !== "object") return null;
+	const record = payload as Record<string, unknown>;
+	const token = record.integrityToken ?? record.websafeFallbackToken;
+	if (typeof token !== "string" || !token) return null;
+	const ttl = typeof record.estimatedTtlSecs === "number" ? record.estimatedTtlSecs : 43_200;
+	return { token, ttlSecs: ttl };
 }
 
 async function fetchTvPage(): Promise<TvAppInfo> {
@@ -69,23 +86,85 @@ async function fetchTvPage(): Promise<TvAppInfo> {
 	return info;
 }
 
-async function fetchTvChallenge(): Promise<TvChallenge> {
+async function fetchRequestKey(): Promise<string> {
 	const response = await youtubeFetch(TV_CONFIG_URL, {
 		headers: { "User-Agent": TV_USER_AGENT, "Accept-Language": "en-US,en;q=0.7" },
 	});
 	if (!response.ok) throw new Error(`tv config request failed: ${response.status}`);
-	const challenge = parseTvChallenge(await response.text());
-	if (!challenge) throw new Error("tv config has no usable BotGuard challenge");
-	return challenge;
+	const key = parseRequestKey(await response.text());
+	if (!key) throw new Error("tv config has no challenge request key");
+	return key;
+}
+
+async function fetchHomeEventId(): Promise<string> {
+	const response = await youtubeFetch("https://www.youtube.com/", {
+		headers: {
+			"User-Agent": TV_USER_AGENT,
+			Accept: "text/html,application/xhtml+xml",
+			"Accept-Language": "en-US,en;q=0.7",
+		},
+	});
+	if (!response.ok) throw new Error(`home page request failed: ${response.status}`);
+	const eventId = /"EVENT_ID":"(.*?)"/.exec(await response.text())?.[1];
+	if (!eventId) throw new Error("home page has no EVENT_ID");
+	return eventId;
+}
+
+async function fetchTvChallenge(requestKey: string): Promise<TvChallenge> {
+	const response = await youtubeFetch(`${WAA_BASE}/Create?key=${GOOG_API_KEY}`, {
+		method: "POST",
+		headers: { "content-type": "application/json", "User-Agent": TV_USER_AGENT },
+		body: JSON.stringify({ requestKey }),
+	});
+	if (!response.ok) throw new Error(`waa create failed: ${response.status}`);
+	const payload = (await response.json()) as {
+		challenge?: {
+			program?: unknown;
+			globalName?: unknown;
+			interpreterJavascript?: Record<string, unknown>;
+			interpreterUrl?: Record<string, unknown>;
+		};
+	};
+	const challenge = payload.challenge;
+	const program = challenge?.program;
+	const globalName = challenge?.globalName;
+	const embedded = challenge?.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
+	if (typeof program !== "string" || typeof globalName !== "string") {
+		throw new Error("waa create returned no challenge");
+	}
+	const script =
+		typeof embedded === "string" && embedded
+			? embedded
+			: await interpreterScript(
+					String(
+						challenge?.interpreterUrl?.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue ?? "",
+					),
+				);
+	if (!script) throw new Error("waa challenge has no interpreter");
+	return { program, globalName, interpreterScript: script };
 }
 
 async function interpreterScript(url: string): Promise<string> {
+	if (!url) return "";
 	const absolute = url.startsWith("//") ? `https:${url}` : url;
 	const response = await youtubeFetch(absolute, { headers: { "User-Agent": TV_USER_AGENT } });
 	if (!response.ok) throw new Error(`tv interpreter fetch failed: ${response.status}`);
-	const script = await response.text();
-	if (!script) throw new Error("tv interpreter fetch returned an empty body");
-	return script;
+	return response.text();
+}
+
+async function generateIntegrityToken(
+	requestKey: string,
+	botguardResponse: string,
+): Promise<string> {
+	const response = await youtubeFetch(`${WAA_BASE}/GenerateIT?key=${GOOG_API_KEY}`, {
+		method: "POST",
+		headers: { "content-type": "application/json", "User-Agent": TV_USER_AGENT },
+		body: JSON.stringify({ requestKey, botguardResponse }),
+	});
+	if (!response.ok) throw new Error(`waa generate failed: ${response.status}`);
+	const parsed = parseIntegrityToken(await response.json());
+	if (!parsed) throw new Error("waa generate returned no integrity token");
+	return parsed.token;
 }
 
 export class TvPoTokenMinter {
@@ -102,15 +181,21 @@ export class TvPoTokenMinter {
 	}
 
 	private async mint(now: number): Promise<TvPoToken> {
-		const [appInfo, challenge] = await Promise.all([fetchTvPage(), fetchTvChallenge()]);
-		const script = await interpreterScript(challenge.interpreterUrl);
-		const integrityToken = await executeBotGuard(
-			script,
+		const [appInfo, requestKey, eventId] = await Promise.all([
+			fetchTvPage(),
+			fetchRequestKey(),
+			fetchHomeEventId(),
+		]);
+		const challenge = await fetchTvChallenge(requestKey);
+		const botguardResponse = await executeBotGuard(
+			challenge.interpreterScript,
 			challenge.program,
 			challenge.globalName,
-			"",
+			eventId,
+			TV_USER_AGENT,
 		);
-		const poToken = await mintPoToken(integrityToken, appInfo.livingRoomPoTokenId);
+		const integrityToken = await generateIntegrityToken(requestKey, botguardResponse);
+		const poToken = await mintPoToken(integrityToken, appInfo.livingRoomPoTokenId, TV_USER_AGENT);
 		if (!poToken) throw new Error("tv poToken minting returned an empty token");
 		const value: TvPoToken = {
 			poToken,
