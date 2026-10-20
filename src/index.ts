@@ -13,6 +13,8 @@ import {
 } from "./remote-login-routes.ts";
 import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
+import { TvPoTokenMinter } from "./tv-po-token.ts";
+import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
@@ -22,6 +24,7 @@ const remoteLoginConfig = readRemoteLoginConfig();
 const remoteLoginManager = new RemoteLoginManager(remoteLoginConfig);
 const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLoginConfig);
 const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
+const tvPoTokenRoutes = createTvPoTokenRoutes(new TvPoTokenMinter());
 
 export async function handler(
 	req: Request,
@@ -32,6 +35,8 @@ export async function handler(
 	if (remoteLoginResponse !== null) return remoteLoginResponse;
 	const deviceAuthResponse = await deviceAuthRoutes(req, url);
 	if (deviceAuthResponse !== null) return deviceAuthResponse;
+	const tvPoTokenResponse = await tvPoTokenRoutes(req, url);
+	if (tvPoTokenResponse !== null) return tvPoTokenResponse;
 	const subtitleResponse = await handleSubtitleRequest(req, url);
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
