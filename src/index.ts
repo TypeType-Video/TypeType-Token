@@ -1,5 +1,7 @@
 import type { Server } from "bun";
 import { buildInfo } from "./build-info.ts";
+import { DeviceAuth } from "./device-auth.ts";
+import { createDeviceAuthRoutes } from "./device-auth-routes.ts";
 import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 import { handlePoTokenRequest } from "./po-token-routes.ts";
 import { readRemoteLoginConfig } from "./remote-login-config.ts";
@@ -19,6 +21,7 @@ const PORT = 8081;
 const remoteLoginConfig = readRemoteLoginConfig();
 const remoteLoginManager = new RemoteLoginManager(remoteLoginConfig);
 const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLoginConfig);
+const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
 
 export async function handler(
 	req: Request,
@@ -27,6 +30,8 @@ export async function handler(
 	const url = new URL(req.url);
 	const remoteLoginResponse = await remoteLoginHandler(req, url, server);
 	if (remoteLoginResponse !== null) return remoteLoginResponse;
+	const deviceAuthResponse = await deviceAuthRoutes(req, url);
+	if (deviceAuthResponse !== null) return deviceAuthResponse;
 	const subtitleResponse = await handleSubtitleRequest(req, url);
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
