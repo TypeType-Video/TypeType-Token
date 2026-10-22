@@ -1,4 +1,4 @@
-import type { Browser, Cookie, Frame, Page } from "playwright";
+import type { Browser, BrowserContext, Cookie, Frame, Page } from "playwright";
 import { chromium } from "playwright";
 import type { RemoteLoginConfig } from "./remote-login-config.ts";
 import { describeCookies, describeError, describeUrl } from "./remote-login-diagnostics.ts";
@@ -268,7 +268,7 @@ export async function createRemoteLoginPage(
 
 export async function createCookieImportPage(
 	config: RemoteLoginConfig,
-	cookies: Cookie[],
+	cookies: Parameters<BrowserContext["addCookies"]>[0],
 	onPoToken: (poToken: string) => void,
 ): Promise<RemoteLoginPage> {
 	const browser = await ensureRemoteBrowser(config);
