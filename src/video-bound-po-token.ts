@@ -38,7 +38,7 @@ export async function getVideoBoundPoToken(
 		return inFlight;
 	}
 
-	const request = tracePlaybackPhase(trace, eventPrefix + ".mint", () =>
+	const request = tracePlaybackPhase(trace, `${eventPrefix}.mint`, () =>
 		mintPoToken(s.integrityToken, videoId),
 	)
 		.then((token) => {

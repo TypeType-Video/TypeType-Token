@@ -75,16 +75,18 @@ function parseNetscape(raw: string): SessionCookie[] {
 		const path = fields[2].trim();
 		if (!domain || !path.startsWith("/")) return [];
 		const expiresAt = Number(fields[4]);
-		return [{
-			name: fields[5].trim(),
-			value: fields[6].trim(),
-			domain,
-			includeSubdomains: fields[1].trim().toUpperCase() === "TRUE",
-			path,
-			expires: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : -1,
-			secure: fields[3].trim().toUpperCase() === "TRUE",
-			httpOnly,
-		}];
+		return [
+			{
+				name: fields[5].trim(),
+				value: fields[6].trim(),
+				domain,
+				includeSubdomains: fields[1].trim().toUpperCase() === "TRUE",
+				path,
+				expires: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : -1,
+				secure: fields[3].trim().toUpperCase() === "TRUE",
+				httpOnly,
+			},
+		];
 	});
 }
 
