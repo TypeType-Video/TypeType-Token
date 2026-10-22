@@ -1,4 +1,4 @@
-import type { Browser, Cookie, Frame, Page } from "playwright";
+import type { Browser, BrowserContext, Cookie, Frame, Page } from "playwright";
 import { chromium } from "playwright";
 import type { RemoteLoginConfig } from "./remote-login-config.ts";
 import { describeCookies, describeError, describeUrl } from "./remote-login-diagnostics.ts";
@@ -238,6 +238,64 @@ export async function createRemoteLoginPage(
 		if (poToken) onPoToken(poToken);
 	});
 	await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+	return {
+		page,
+		close: () => context.close().catch(() => undefined),
+		cookies: async () =>
+			formatNetscapeCookies(await context.cookies(COOKIE_URLS), config.maxCookieBytes),
+		authUser: async () =>
+			page.evaluate(() => {
+				const ytcfg = (
+					globalThis as typeof globalThis & {
+						ytcfg?: { get: (key: string) => unknown };
+					}
+				).ytcfg;
+				const value = Number(ytcfg?.get("SESSION_INDEX") ?? 0);
+				return Number.isInteger(value) && value >= 0 && value <= 99 ? value : 0;
+			}),
+		hasLoginCookie: async () =>
+			isYoutubeUrl(page.url()) && (await context.cookies(YOUTUBE_URL)).some(isYoutubeLoginCookie),
+		hasGoogleLoginCookie: async () =>
+			(await context.cookies(COOKIE_URLS)).some(isGoogleLoginCookie),
+		retrySignInHandshake: async () => {
+			await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
+		},
+		url: () => page.url(),
+		cookieSummary: async () => describeCookies(await context.cookies(COOKIE_URLS)),
+		observe: (listener) => observePage(page, listener),
+	};
+}
+
+export async function createCookieImportPage(
+	config: RemoteLoginConfig,
+	cookies: Parameters<BrowserContext["addCookies"]>[0],
+	onPoToken: (poToken: string) => void,
+): Promise<RemoteLoginPage> {
+	const browser = await ensureRemoteBrowser(config);
+	const context = await browser.newContext(contextOptions(config));
+	await context.addInitScript(installWebAuthnBypassOverrides);
+	await context.addCookies(cookies);
+	const page = await context.newPage();
+	page.on("request", (request) => {
+		const poToken = capturePot(request.url());
+		if (poToken) onPoToken(poToken);
+	});
+	const probeUrl = new URL(config.probeVideoUrl);
+	if (probeUrl.hostname === "music.youtube.com") probeUrl.hostname = "www.youtube.com";
+	await page.goto(probeUrl.toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
+	await page.waitForSelector("video", { timeout: 20_000 }).catch(() => undefined);
+	await page
+		.locator("button.ytp-large-play-button")
+		.click({ timeout: 3_000 })
+		.catch(() => undefined);
+	await page
+		.evaluate(() => {
+			const video = document.querySelector("video");
+			if (!video) return;
+			video.muted = true;
+			void video.play().catch(() => undefined);
+		})
+		.catch(() => undefined);
 	return {
 		page,
 		close: () => context.close().catch(() => undefined),

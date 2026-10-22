@@ -25,6 +25,7 @@ WORKDIR /app
 COPY --from=oven/bun:1.4.2-slim /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/vendor ./dist/vendor
 COPY --chmod=755 docker-entrypoint.sh ./docker-entrypoint.sh
 EXPOSE 8081
 ENV NODE_ENV=production

@@ -1,5 +1,7 @@
 import type { Server } from "bun";
 import { buildInfo } from "./build-info.ts";
+import { DeviceAuth } from "./device-auth.ts";
+import { createDeviceAuthRoutes } from "./device-auth-routes.ts";
 import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 import { handlePoTokenRequest } from "./po-token-routes.ts";
 import { readRemoteLoginConfig } from "./remote-login-config.ts";
@@ -9,7 +11,10 @@ import {
 	createRemoteLoginHandler,
 	type RemoteLoginWebSocketData,
 } from "./remote-login-routes.ts";
+import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
+import { TvPoTokenMinter } from "./tv-po-token.ts";
+import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
@@ -18,6 +23,8 @@ const PORT = 8081;
 const remoteLoginConfig = readRemoteLoginConfig();
 const remoteLoginManager = new RemoteLoginManager(remoteLoginConfig);
 const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLoginConfig);
+const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
+const tvPoTokenRoutes = createTvPoTokenRoutes(new TvPoTokenMinter());
 
 export async function handler(
 	req: Request,
@@ -26,10 +33,30 @@ export async function handler(
 	const url = new URL(req.url);
 	const remoteLoginResponse = await remoteLoginHandler(req, url, server);
 	if (remoteLoginResponse !== null) return remoteLoginResponse;
+	const deviceAuthResponse = await deviceAuthRoutes(req, url);
+	if (deviceAuthResponse !== null) return deviceAuthResponse;
+	const tvPoTokenResponse = await tvPoTokenRoutes(req, url);
+	if (tvPoTokenResponse !== null) return tvPoTokenResponse;
 	const subtitleResponse = await handleSubtitleRequest(req, url);
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
 	if (poTokenResponse !== null) return poTokenResponse;
+
+	if (req.method === "POST" && url.pathname === "/session-binding") {
+		const body = (await req.json().catch(() => null)) as { cookies?: unknown } | null;
+		const cookies = typeof body?.cookies === "string" ? body.cookies : "";
+		if (!cookies.trim()) return Response.json({ error: "cookies are required" }, { status: 400 });
+		const result = await importSessionBinding(remoteLoginConfig, cookies);
+		if (result.ok === false) {
+			const status = result.reason === "invalid_cookies" ? 400 : 422;
+			return Response.json({ error: result.reason }, { status });
+		}
+		return Response.json({
+			cookies: result.cookies,
+			poToken: result.poToken,
+			authUser: result.authUser,
+		});
+	}
 
 	if (req.method === "GET" && url.pathname === "/youtube/sabr/session") {
 		const videoId = url.searchParams.get("videoId");
