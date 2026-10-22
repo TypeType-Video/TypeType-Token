@@ -1,7 +1,8 @@
-import type { Cookie } from "playwright";
+import type { BrowserContext } from "playwright";
 
 const MAX_RAW_COOKIES_LENGTH = 32 * 1024;
 const MAX_COOKIES = 120;
+type BrowserCookieParam = Parameters<BrowserContext["addCookies"]>[0][number];
 const DEFAULT_DOMAIN = "youtube.com";
 
 export type SessionCookie = {
@@ -26,7 +27,7 @@ export function parseSessionCookies(raw: string): SessionCookie[] {
 	return [...unique.values()].slice(0, MAX_COOKIES);
 }
 
-export function toBrowserCookies(cookies: SessionCookie[]): Cookie[] {
+export function toBrowserCookies(cookies: SessionCookie[]): BrowserCookieParam[] {
 	return cookies.map((cookie) => {
 		const shared = {
 			name: cookie.name,
