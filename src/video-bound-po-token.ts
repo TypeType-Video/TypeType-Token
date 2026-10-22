@@ -28,13 +28,13 @@ export async function getVideoBoundPoToken(
 		target === "session_binding" ? "token.session_bound_po_token" : "token.video_bound_po_token";
 	const cached = s.videoBoundPoTokens.get(videoId);
 	if (cached !== undefined) {
-		playbackTraceEvent(trace, eventPrefix + ".cache_hit");
+		playbackTraceEvent(trace, `${eventPrefix}.cache_hit`);
 		return cached;
 	}
 
 	const inFlight = s.videoBoundPoTokenRequests.get(videoId);
 	if (inFlight !== undefined) {
-		playbackTraceEvent(trace, eventPrefix + ".singleflight_join");
+		playbackTraceEvent(trace, `${eventPrefix}.singleflight_join`);
 		return inFlight;
 	}
 
