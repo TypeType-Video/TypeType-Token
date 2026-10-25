@@ -16,7 +16,7 @@ import { handleSubtitleRequest } from "./subtitle-routes.ts";
 import { startTokenWarmup } from "./token-warmup.ts";
 import { TvPoTokenMinter } from "./tv-po-token.ts";
 import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
-import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
+import { handleYoutubePlayerDecoderRequest } from "./youtube-player-decoder-routes.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
 
@@ -43,6 +43,8 @@ export async function handler(
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
 	if (poTokenResponse !== null) return poTokenResponse;
+	const decoderResponse = await handleYoutubePlayerDecoderRequest(req, url);
+	if (decoderResponse !== null) return decoderResponse;
 
 	if (req.method === "POST" && url.pathname === "/session-binding") {
 		const body = (await req.json().catch(() => null)) as { cookies?: unknown } | null;
@@ -120,18 +122,6 @@ export async function handler(
 				);
 				return Response.json(result);
 			});
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Internal error";
-			return Response.json({ error: message }, { status: 500 });
-		}
-	}
-
-	if (req.method === "POST" && url.pathname === "/youtube/player/decoder") {
-		try {
-			const body = (await req.json().catch(() => ({}))) as Parameters<
-				typeof decodeYoutubePlayerBatch
-			>[0];
-			return Response.json(await decodeYoutubePlayerBatch(body));
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Internal error";
 			return Response.json({ error: message }, { status: 500 });
