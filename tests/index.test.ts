@@ -5,6 +5,7 @@ import type { TokenResult } from "../src/token-service.ts";
 import type { RawCaptionTrack } from "../src/youtube-caption-tracks.ts";
 import type { YoutubePlayerDecodeResponse } from "../src/youtube-player-decoder.ts";
 import type { YoutubeSabrSession } from "../src/youtube-sabr-types.ts";
+import { tokenServiceModule } from "./token-service-fixtures.ts";
 
 const mockFetchPoToken = mock(
 	async (videoId: string, _forceRefresh = false, _refreshVideo = false): Promise<TokenResult> => ({
@@ -55,13 +56,15 @@ const mockFetchYoutubeSabrSession = mock(
 	}),
 );
 
-mock.module("../src/token-service.ts", () => ({
-	fetchPoToken: mockFetchPoToken,
-	fetchSessionPoTokens: mock(async () => ({
-		...(await mockFetchPoToken("abc")),
-		sessionBoundPoToken: "session-bound-token",
-	})),
-}));
+mock.module("../src/token-service.ts", () =>
+	tokenServiceModule({
+		fetchPoToken: mockFetchPoToken,
+		fetchSessionPoTokens: mock(async () => ({
+			...(await mockFetchPoToken("abc")),
+			sessionBoundPoToken: "session-bound-token",
+		})),
+	}),
+);
 
 mock.module("../src/innertube.ts", () => ({
 	fetchVisitorData: mock(async (): Promise<string> => "visitor-data"),

@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { SessionTokenResult } from "../src/token-service.ts";
+import { tokenServiceModule } from "./token-service-fixtures.ts";
 
 const fetchSessionPoTokens = mock(
 	async (
@@ -18,10 +19,12 @@ const fetchSessionPoTokens = mock(
 	}),
 );
 
-mock.module("../src/token-service.ts", () => ({
-	fetchPoToken: mock(async () => ({})),
-	fetchSessionPoTokens,
-}));
+mock.module("../src/token-service.ts", () =>
+	tokenServiceModule({
+		fetchPoToken: mock(async () => ({})),
+		fetchSessionPoTokens,
+	}),
+);
 
 describe("POST /potoken/session", () => {
 	it("returns tokens bound by one internal request", async () => {

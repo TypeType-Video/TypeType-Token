@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import type { SubtitleTrack } from "../src/subtitles.ts";
 import { MWEB_USER_AGENT } from "../src/youtube-mweb-config.ts";
 import { fakeBotGuardModule } from "./botguard-context-fixtures.ts";
+import { tokenServiceModule } from "./token-service-fixtures.ts";
 
 const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
@@ -21,29 +22,31 @@ mock.module("../src/botguard-page.ts", () =>
 	}),
 );
 
-mock.module("../src/token-service.ts", () => ({
-	getOrRefreshSession: mock(async () => ({
-		visitorData: VISITOR_DATA,
-		visitorBoundPoToken: PO_TOKEN,
-		integrityToken: INTEGRITY_TOKEN,
-		expiresAt: Date.now() + 3600_000,
-	})),
-	fetchPoToken: mock(async (videoId: string) => ({
-		visitorData: VISITOR_DATA,
-		visitorBoundPoToken: PO_TOKEN,
-		videoBoundPoToken: `pot-${videoId}`,
-		poToken: PO_TOKEN,
-		streamingPot: `pot-${videoId}`,
-	})),
-	fetchSessionPoTokens: mock(async (videoId: string, sessionBinding: string) => ({
-		visitorData: VISITOR_DATA,
-		visitorBoundPoToken: PO_TOKEN,
-		videoBoundPoToken: `pot-${videoId}`,
-		poToken: PO_TOKEN,
-		streamingPot: `pot-${videoId}`,
-		sessionBoundPoToken: `pot-${sessionBinding}`,
-	})),
-}));
+mock.module("../src/token-service.ts", () =>
+	tokenServiceModule({
+		getOrRefreshSession: mock(async () => ({
+			visitorData: VISITOR_DATA,
+			visitorBoundPoToken: PO_TOKEN,
+			integrityToken: INTEGRITY_TOKEN,
+			expiresAt: Date.now() + 3600_000,
+		})),
+		fetchPoToken: mock(async (videoId: string) => ({
+			visitorData: VISITOR_DATA,
+			visitorBoundPoToken: PO_TOKEN,
+			videoBoundPoToken: `pot-${videoId}`,
+			poToken: PO_TOKEN,
+			streamingPot: `pot-${videoId}`,
+		})),
+		fetchSessionPoTokens: mock(async (videoId: string, sessionBinding: string) => ({
+			visitorData: VISITOR_DATA,
+			visitorBoundPoToken: PO_TOKEN,
+			videoBoundPoToken: `pot-${videoId}`,
+			poToken: PO_TOKEN,
+			streamingPot: `pot-${videoId}`,
+			sessionBoundPoToken: `pot-${sessionBinding}`,
+		})),
+	}),
+);
 
 const frTrack = {
 	baseUrl: "https://www.youtube.com/api/timedtext?lang=fr",
