@@ -18,7 +18,7 @@ import { sessionStatus } from "./token-service.ts";
 import { startTokenWarmup } from "./token-warmup.ts";
 import { TvPoTokenMinter } from "./tv-po-token.ts";
 import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
-import { handleYoutubePlayerDecoderRequest } from "./youtube-player-decoder-routes.ts";
+import { createYoutubePlayerDecoderRoutes } from "./youtube-player-decoder-routes.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
 
@@ -29,6 +29,7 @@ const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLo
 const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
 const tvPoTokenMinter = new TvPoTokenMinter();
 const tvPoTokenRoutes = createTvPoTokenRoutes(tvPoTokenMinter);
+const decoderRoutes = createYoutubePlayerDecoderRoutes();
 const serviceStatusRoutes = createServiceStatusRoutes({
 	browserConnected: isBotGuardBrowserConnected,
 	session: sessionStatus,
@@ -52,7 +53,7 @@ export async function handler(
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
 	if (poTokenResponse !== null) return poTokenResponse;
-	const decoderResponse = await handleYoutubePlayerDecoderRequest(req, url);
+	const decoderResponse = await decoderRoutes(req, url);
 	if (decoderResponse !== null) return decoderResponse;
 
 	if (req.method === "POST" && url.pathname === "/session-binding") {

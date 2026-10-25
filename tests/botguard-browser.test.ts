@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import type { BotGuardContext as BotGuardContextType } from "../src/botguard-page.ts";
 import { sharedChromium as chromium } from "./botguard-browser-fixtures.ts";
+import { maxConcurrency } from "./concurrency-fixtures.ts";
 
 mock.module("playwright", () => ({ chromium }));
 
@@ -55,6 +56,30 @@ describe("BotGuard browser", () => {
 
 			await expect(context.execute(CHALLENGE)).rejects.toThrow("BotGuard evaluation timed out");
 			expect(context.isClosed()).toBe(true);
+		} finally {
+			chromium.evaluate = evaluate;
+		}
+	});
+
+	it("runs at most four BotGuard evaluations at once", async () => {
+		const evaluate = chromium.evaluate;
+		const tasks = new Map<unknown, () => Promise<void>>();
+		chromium.evaluate = async (_page, args) => {
+			await tasks.get(args.eventId)?.();
+			return "botguard-response";
+		};
+		try {
+			const contexts = await Promise.all(
+				Array.from({ length: 6 }, () => BotGuardContext.open(undefined, 5_000)),
+			);
+			const peak = await maxConcurrency(6, (task) => {
+				const eventId = `event-${tasks.size}`;
+				tasks.set(eventId, task);
+				const context = contexts[tasks.size - 1];
+				return context ? context.execute({ ...CHALLENGE, eventId }) : Promise.resolve();
+			});
+
+			expect(peak).toBe(4);
 		} finally {
 			chromium.evaluate = evaluate;
 		}

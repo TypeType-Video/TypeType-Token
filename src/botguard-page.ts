@@ -2,11 +2,13 @@ import type { Browser, Page } from "playwright";
 import { botGuardBrowser } from "./botguard-browser.ts";
 import { type BotGuardChallenge, WEB_USER_AGENT } from "./botguard-challenge.ts";
 import { mintPoTokenInPage, runBotGuardInPage } from "./botguard-page-scripts.ts";
+import { Semaphore } from "./semaphore.ts";
 import { TimeoutError, withTimeout } from "./with-timeout.ts";
 
 const ROUTE = "https://www.youtube.com/__bgp__";
 const BLANK_HTML = "<!DOCTYPE html><html><body></body></html>";
 const EVALUATE_TIMEOUT_MS = 15_000;
+const evaluations = new Semaphore(4);
 
 export class BotGuardContextClosedError extends Error {
 	constructor() {
@@ -67,7 +69,11 @@ export class BotGuardContext {
 		);
 	}
 
-	private async evaluate<T>(run: (page: Page) => Promise<T>): Promise<T> {
+	private evaluate<T>(run: (page: Page) => Promise<T>): Promise<T> {
+		return evaluations.run(() => this.evaluateNow(run));
+	}
+
+	private async evaluateNow<T>(run: (page: Page) => Promise<T>): Promise<T> {
 		if (this.isClosed()) throw new BotGuardContextClosedError();
 		try {
 			return await withTimeout(
