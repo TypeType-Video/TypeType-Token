@@ -1,10 +1,11 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock, setSystemTime } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { TokenResult } from "../src/token-service.ts";
 import {
 	type FakeBotGuardContext,
 	FakeBotGuardContextClosedError,
 	fakeBotGuardModule,
+	passForcedRefreshCooldown,
 } from "./botguard-context-fixtures.ts";
 
 let visitorRequests = 0;
@@ -75,8 +76,13 @@ describe("token session refresh while serving", () => {
 		fetchPoToken = module.fetchPoToken;
 	});
 
+	afterAll(() => {
+		setSystemTime();
+	});
+
 	it("keeps serving the unexpired session while a refresh builds", async () => {
 		const first = await fetchPoToken("first-video");
+		passForcedRefreshCooldown();
 		const hold = holdNextRefresh();
 		const forced = fetchPoToken("forced-video", true);
 		await hold.requested;
@@ -97,5 +103,20 @@ describe("token session refresh while serving", () => {
 
 		expect(result.videoBoundPoToken).toBe("pot-closed-page-video");
 		expect(result.visitorData).not.toBe(before.visitorData);
+	});
+
+	it("returns the fresh session to forced refreshes inside the cooldown", async () => {
+		passForcedRefreshCooldown();
+		const refreshed = await fetchPoToken("cooldown-first", true);
+		const requestsAfterRefresh = visitorRequests;
+
+		const repeated = await fetchPoToken("cooldown-second", true);
+
+		expect(repeated.visitorData).toBe(refreshed.visitorData);
+		expect(visitorRequests).toBe(requestsAfterRefresh);
+
+		passForcedRefreshCooldown();
+		const later = await fetchPoToken("cooldown-third", true);
+		expect(later.visitorData).not.toBe(refreshed.visitorData);
 	});
 });

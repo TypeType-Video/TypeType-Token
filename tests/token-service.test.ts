@@ -1,8 +1,8 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock, setSystemTime } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { BotGuardChallenge } from "../src/botguard-challenge.ts";
 import type { SessionTokenResult, TokenResult } from "../src/token-service.ts";
-import { fakeBotGuardModule } from "./botguard-context-fixtures.ts";
+import { fakeBotGuardModule, passForcedRefreshCooldown } from "./botguard-context-fixtures.ts";
 
 const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
@@ -55,6 +55,10 @@ describe("fetchPoToken", () => {
 		const module = await import("../src/token-service.ts?token-service-test");
 		fetchPoToken = module.fetchPoToken;
 		fetchSessionPoTokens = module.fetchSessionPoTokens;
+	});
+
+	afterAll(() => {
+		setSystemTime();
 	});
 
 	it("does not call buildSession twice on concurrent requests", async () => {
@@ -124,6 +128,7 @@ describe("fetchPoToken", () => {
 		const callsBefore = mockExecuteBotGuard.mock.calls.length;
 		const refreshedVisitorData = `${VISITOR_DATA}-refresh`;
 		currentVisitorData = refreshedVisitorData;
+		passForcedRefreshCooldown();
 
 		const result = await fetchPoToken("video-id-refresh", true);
 

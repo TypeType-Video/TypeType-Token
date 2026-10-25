@@ -1,19 +1,26 @@
 import { type PlaybackTraceContext, playbackTraceEvent } from "./playback-diagnostics.ts";
 import type { CachedSession } from "./video-bound-po-token.ts";
 
+const FORCED_REFRESH_COOLDOWN_MS = 30_000;
+
 type BotGuardSessionStoreDependencies = {
 	build: (trace?: PlaybackTraceContext) => Promise<CachedSession>;
 	retire: (session: CachedSession) => Promise<void>;
 	now?: () => number;
+	forcedRefreshCooldownMs?: number;
 };
 
 export class BotGuardSessionStore {
 	private current: CachedSession | null = null;
 	private refreshing: Promise<CachedSession> | null = null;
+	private lastRefreshAt: number | null = null;
 	private readonly now: () => number;
+	private readonly forcedRefreshCooldownMs: number;
 
 	constructor(private readonly dependencies: BotGuardSessionStoreDependencies) {
 		this.now = dependencies.now ?? Date.now;
+		this.forcedRefreshCooldownMs =
+			dependencies.forcedRefreshCooldownMs ?? FORCED_REFRESH_COOLDOWN_MS;
 	}
 
 	async get(forceRefresh = false, trace?: PlaybackTraceContext): Promise<CachedSession> {
@@ -25,6 +32,10 @@ export class BotGuardSessionStore {
 		if (this.refreshing !== null) {
 			playbackTraceEvent(trace, "session.refresh.singleflight_join");
 			return this.refreshing;
+		}
+		if (usable !== null && this.refreshedRecently()) {
+			playbackTraceEvent(trace, "session.refresh.cooldown");
+			return usable;
 		}
 		playbackTraceEvent(trace, forceRefresh ? "session.cache_bypass" : "session.cache_miss");
 		return this.refresh(trace);
@@ -38,6 +49,7 @@ export class BotGuardSessionStore {
 			.then((session) => {
 				const previous = this.current;
 				this.current = session;
+				this.lastRefreshAt = this.now();
 				if (previous !== null) {
 					previous.retired = true;
 					void this.dependencies.retire(previous);
@@ -57,6 +69,12 @@ export class BotGuardSessionStore {
 			});
 		this.refreshing = refresh;
 		return refresh;
+	}
+
+	private refreshedRecently(): boolean {
+		return (
+			this.lastRefreshAt !== null && this.now() - this.lastRefreshAt < this.forcedRefreshCooldownMs
+		);
 	}
 
 	private usable(): CachedSession | null {

@@ -1,7 +1,11 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock, setSystemTime } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { TokenResult } from "../src/token-service.ts";
-import { type FakeBotGuardContext, fakeBotGuardModule } from "./botguard-context-fixtures.ts";
+import {
+	type FakeBotGuardContext,
+	fakeBotGuardModule,
+	passForcedRefreshCooldown,
+} from "./botguard-context-fixtures.ts";
 
 let markVisitorDataStarted: (() => void) | undefined;
 const visitorDataStarted = new Promise<void>((resolve) => {
@@ -96,6 +100,10 @@ describe("token refresh concurrency", () => {
 		fetchPoToken = module.fetchPoToken;
 	});
 
+	afterAll(() => {
+		setSystemTime();
+	});
+
 	it("joins a forced refresh to an active session refresh", async () => {
 		const regular = fetchPoToken("regular-video");
 		await visitorDataStarted;
@@ -141,6 +149,7 @@ describe("token refresh concurrency", () => {
 		const previousContext = openedContexts.at(-1);
 		const activeMint = fetchPoToken("racing-video");
 		await racingMintStarted;
+		passForcedRefreshCooldown();
 		const forcedRefresh = fetchPoToken("forced-after-race", true);
 		await forcedRefresh;
 		expect(refreshEvents.slice(eventsBefore)).toEqual(["mint-started"]);

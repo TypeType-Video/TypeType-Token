@@ -1,3 +1,4 @@
+import { setSystemTime } from "bun:test";
 import type { BotGuardChallenge } from "../src/botguard-challenge.ts";
 
 export type FakeBotGuardHandlers = {
@@ -47,4 +48,8 @@ export function fakeBotGuardModule(
 		},
 		BotGuardContextClosedError: FakeBotGuardContextClosedError,
 	};
+}
+
+export function passForcedRefreshCooldown(): void {
+	setSystemTime(new Date(Date.now() + 31_000));
 }
