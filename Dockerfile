@@ -12,7 +12,7 @@ COPY package.json bun.lock ./
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN bun install --frozen-lockfile --production
 
-FROM mcr.microsoft.com/playwright:v1.64.0-noble AS runner
+FROM mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea AS runner
 ARG BUILD_VERSION=1.7.0-dev
 ARG BUILD_REVISION=development
 ARG BUILD_TIME=unknown
