@@ -1,4 +1,5 @@
-import { executeBotGuard, mintPoToken } from "./botguard-page.ts";
+import type { BotGuardChallenge } from "./botguard-challenge.ts";
+import { BotGuardContext } from "./botguard-page.ts";
 import { youtubeFetch } from "./youtube-fetch.ts";
 
 const TV_USER_AGENT =
@@ -167,6 +168,21 @@ async function generateIntegrityToken(
 	return parsed.token;
 }
 
+async function mintInContext(
+	challenge: BotGuardChallenge,
+	requestKey: string,
+	livingRoomPoTokenId: string,
+): Promise<string> {
+	const context = await BotGuardContext.open(TV_USER_AGENT);
+	try {
+		const botguardResponse = await context.execute(challenge);
+		const integrityToken = await generateIntegrityToken(requestKey, botguardResponse);
+		return await context.mint(integrityToken, livingRoomPoTokenId);
+	} finally {
+		await context.close();
+	}
+}
+
 export class TvPoTokenMinter {
 	private cached: TvPoToken | null = null;
 	private inflight: Promise<TvPoToken> | null = null;
@@ -187,15 +203,11 @@ export class TvPoTokenMinter {
 			fetchHomeEventId(),
 		]);
 		const challenge = await fetchTvChallenge(requestKey);
-		const botguardResponse = await executeBotGuard(
-			challenge.interpreterScript,
-			challenge.program,
-			challenge.globalName,
-			eventId,
-			TV_USER_AGENT,
+		const poToken = await mintInContext(
+			{ ...challenge, eventId },
+			requestKey,
+			appInfo.livingRoomPoTokenId,
 		);
-		const integrityToken = await generateIntegrityToken(requestKey, botguardResponse);
-		const poToken = await mintPoToken(integrityToken, appInfo.livingRoomPoTokenId, TV_USER_AGENT);
 		if (!poToken) throw new Error("tv poToken minting returned an empty token");
 		const value: TvPoToken = {
 			poToken,

@@ -1,22 +1,25 @@
 type Listener = () => void;
-type Evaluate = (args: unknown) => Promise<unknown>;
+export type FakeEvaluate = (page: FakePage, args: Record<string, unknown>) => Promise<unknown>;
 
 export class FakePage {
 	closed = false;
-	evaluate: Evaluate;
+	executed = false;
 	private readonly closeListeners: Listener[] = [];
 
 	constructor(
 		readonly userAgent: string,
-		evaluate: Evaluate,
-	) {
-		this.evaluate = evaluate;
-	}
+		private readonly evaluator: () => FakeEvaluate,
+	) {}
 
 	async route(): Promise<void> {}
 
 	async goto(): Promise<null> {
 		return null;
+	}
+
+	evaluate(_script: unknown, args: Record<string, unknown>): Promise<unknown> {
+		if (this.closed) return Promise.reject(new Error("Target page has been closed"));
+		return this.evaluator()(this, args);
 	}
 
 	isClosed(): boolean {
@@ -39,7 +42,7 @@ export class FakeBrowser {
 	readonly pages: FakePage[] = [];
 	private readonly disconnectListeners: Listener[] = [];
 
-	constructor(private readonly evaluate: () => Evaluate) {}
+	constructor(private readonly evaluator: () => FakeEvaluate) {}
 
 	isConnected(): boolean {
 		return this.connected;
@@ -51,7 +54,7 @@ export class FakeBrowser {
 
 	async newPage(options: { userAgent: string }): Promise<FakePage> {
 		if (!this.connected) throw new Error("Target page, context or browser has been closed");
-		const page = new FakePage(options.userAgent, this.evaluate());
+		const page = new FakePage(options.userAgent, this.evaluator);
 		this.pages.push(page);
 		return page;
 	}
@@ -63,9 +66,18 @@ export class FakeBrowser {
 	}
 }
 
+export const statefulBotGuardEvaluate: FakeEvaluate = async (page, args) => {
+	if ("prog" in args) {
+		page.executed = true;
+		return "botguard-response";
+	}
+	if (!page.executed) throw new Error("PMD:Undefined");
+	return `pot-${String(args.id)}`;
+};
+
 export class FakeChromium {
 	readonly browsers: FakeBrowser[] = [];
-	evaluate: Evaluate = async () => "evaluated";
+	evaluate: FakeEvaluate = statefulBotGuardEvaluate;
 
 	async launch(): Promise<FakeBrowser> {
 		await Promise.resolve();
@@ -73,4 +85,10 @@ export class FakeChromium {
 		this.browsers.push(browser);
 		return browser;
 	}
+
+	allPages(): FakePage[] {
+		return this.browsers.flatMap((browser) => browser.pages);
+	}
 }
+
+export const sharedChromium = new FakeChromium();

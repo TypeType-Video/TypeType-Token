@@ -1,4 +1,4 @@
-import { mintPoToken } from "./botguard-page.ts";
+import type { BotGuardContext } from "./botguard-page.ts";
 import {
 	type PlaybackTraceContext,
 	playbackTraceEvent,
@@ -8,6 +8,7 @@ import {
 const MAX_CACHED_VIDEO_TOKENS = 512;
 
 export type CachedSession = {
+	context: BotGuardContext;
 	visitorData: string;
 	visitorBoundPoToken: string;
 	integrityToken: string;
@@ -39,7 +40,7 @@ export async function getVideoBoundPoToken(
 	}
 
 	const request = tracePlaybackPhase(trace, eventPrefix + ".mint", () =>
-		mintPoToken(s.integrityToken, videoId),
+		s.context.mint(s.integrityToken, videoId),
 	)
 		.then((token) => {
 			if (s.videoBoundPoTokens.size >= MAX_CACHED_VIDEO_TOKENS) {

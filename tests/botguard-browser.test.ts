@@ -1,15 +1,11 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import { FakeChromium } from "./botguard-browser-fixtures.ts";
+import type { BotGuardContext as BotGuardContextType } from "../src/botguard-page.ts";
+import { sharedChromium as chromium } from "./botguard-browser-fixtures.ts";
 
-const chromium = new FakeChromium();
 mock.module("playwright", () => ({ chromium }));
 
-let executeBotGuard: (
-	script: string,
-	program: string,
-	name: string,
-	eventId: string,
-) => Promise<string>;
+const CHALLENGE = { interpreterScript: "s", program: "p", globalName: "n", eventId: "e" };
+let BotGuardContext: typeof BotGuardContextType;
 let isBotGuardBrowserConnected: () => boolean;
 
 describe("BotGuard browser", () => {
@@ -17,24 +13,37 @@ describe("BotGuard browser", () => {
 		const browserModule = await import("../src/botguard-browser.ts");
 		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const pageModule = await import("../src/botguard-page.ts?botguard-browser-test");
-		executeBotGuard = pageModule.executeBotGuard;
+		BotGuardContext = pageModule.BotGuardContext;
 		isBotGuardBrowserConnected = browserModule.isBotGuardBrowserConnected;
 	});
 
-	it("launches one browser for concurrent evaluations", async () => {
-		await Promise.all([executeBotGuard("s", "p", "n", "e"), executeBotGuard("s", "p", "n", "e")]);
+	it("launches one browser for concurrent contexts", async () => {
+		for (const browser of chromium.browsers) browser.disconnect();
+		const launched = chromium.browsers.length;
+		const contexts = await Promise.all([BotGuardContext.open(), BotGuardContext.open()]);
+		await Promise.all(contexts.map((context) => context.execute(CHALLENGE)));
 
-		expect(chromium.browsers.length).toBe(1);
+		expect(chromium.browsers.length).toBe(launched + 1);
 		expect(isBotGuardBrowserConnected()).toBe(true);
 	});
 
 	it("relaunches the browser after it disconnects", async () => {
+		const stale = await BotGuardContext.open();
 		const launched = chromium.browsers.length;
 		for (const browser of chromium.browsers) browser.disconnect();
 		expect(isBotGuardBrowserConnected()).toBe(false);
+		expect(stale.isClosed()).toBe(true);
 
-		await expect(executeBotGuard("s", "p", "n", "e")).resolves.toBe("evaluated");
+		const context = await BotGuardContext.open();
+		await expect(context.execute(CHALLENGE)).resolves.toBe("botguard-response");
 		expect(chromium.browsers.length).toBe(launched + 1);
 		expect(isBotGuardBrowserConnected()).toBe(true);
+	});
+
+	it("rejects work on a closed context", async () => {
+		const context = await BotGuardContext.open();
+		await context.close();
+
+		await expect(context.mint("integrity", "video")).rejects.toThrow("BotGuard context is closed");
 	});
 });

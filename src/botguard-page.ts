@@ -1,60 +1,66 @@
 import type { Browser, Page } from "playwright";
 import { botGuardBrowser } from "./botguard-browser.ts";
-import { WEB_USER_AGENT } from "./botguard-challenge.ts";
+import { type BotGuardChallenge, WEB_USER_AGENT } from "./botguard-challenge.ts";
 import { mintPoTokenInPage, runBotGuardInPage } from "./botguard-page-scripts.ts";
 
 const ROUTE = "https://www.youtube.com/__bgp__";
 const BLANK_HTML = "<!DOCTYPE html><html><body></body></html>";
 
-let pagesBrowser: Browser | null = null;
-const pages = new Map<string, Page>();
-
-async function ensurePage(userAgent: string = WEB_USER_AGENT): Promise<Page> {
-	const browser = await botGuardBrowser();
-	if (pagesBrowser !== browser) {
-		pages.clear();
-		pagesBrowser = browser;
+export class BotGuardContextClosedError extends Error {
+	constructor() {
+		super("BotGuard context is closed");
+		this.name = "BotGuardContextClosedError";
 	}
-	let active = pages.get(userAgent);
-	if (!active || active.isClosed()) {
-		active = await browser.newPage({ userAgent });
-		await active.route(ROUTE, (route) =>
-			route.fulfill({ contentType: "text/html", body: BLANK_HTML }),
+}
+
+export class BotGuardContext {
+	private constructor(
+		private readonly browser: Browser,
+		private readonly page: Page,
+	) {}
+
+	static async open(userAgent: string = WEB_USER_AGENT): Promise<BotGuardContext> {
+		const browser = await botGuardBrowser();
+		const page = await browser.newPage({ userAgent });
+		try {
+			await page.route(ROUTE, (route) =>
+				route.fulfill({ contentType: "text/html", body: BLANK_HTML }),
+			);
+			await page.goto(ROUTE);
+		} catch (error) {
+			await page.close();
+			throw error;
+		}
+		return new BotGuardContext(browser, page);
+	}
+
+	isClosed(): boolean {
+		return this.page.isClosed() || !this.browser.isConnected();
+	}
+
+	async close(): Promise<void> {
+		if (!this.isClosed()) await this.page.close();
+	}
+
+	execute(challenge: BotGuardChallenge): Promise<string> {
+		return this.evaluate((page) =>
+			page.evaluate(runBotGuardInPage, {
+				script: challenge.interpreterScript,
+				prog: challenge.program,
+				name: challenge.globalName,
+				eventId: challenge.eventId,
+			}),
 		);
-		await active.goto(ROUTE);
-		pages.set(userAgent, active);
 	}
-	return active;
-}
 
-export async function executeBotGuard(
-	interpreterScript: string,
-	program: string,
-	globalName: string,
-	eventId: string,
-	userAgent?: string,
-): Promise<string> {
-	const p = await ensurePage(userAgent);
-	return p.evaluate(runBotGuardInPage, {
-		script: interpreterScript,
-		prog: program,
-		name: globalName,
-		eventId,
-	});
-}
-
-export async function mintPoToken(
-	integrityToken: string,
-	identifier: string,
-	userAgent?: string,
-): Promise<string> {
-	const p = await ensurePage(userAgent);
-	return p.evaluate(mintPoTokenInPage, { token: integrityToken, id: identifier });
-}
-
-export async function resetBotGuardPage(): Promise<void> {
-	for (const active of pages.values()) {
-		if (!active.isClosed()) await active.close();
+	mint(integrityToken: string, identifier: string): Promise<string> {
+		return this.evaluate((page) =>
+			page.evaluate(mintPoTokenInPage, { token: integrityToken, id: identifier }),
+		);
 	}
-	pages.clear();
+
+	private async evaluate<T>(run: (page: Page) => Promise<T>): Promise<T> {
+		if (this.isClosed()) throw new BotGuardContextClosedError();
+		return run(this.page);
+	}
 }

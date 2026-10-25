@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { SubtitleTrack } from "../src/subtitles.ts";
 import { MWEB_USER_AGENT } from "../src/youtube-mweb-config.ts";
+import { fakeBotGuardModule } from "./botguard-context-fixtures.ts";
 
 const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
@@ -13,11 +14,12 @@ const mockYoutubeFetch = mock(
 		}),
 );
 
-mock.module("../src/botguard-page.ts", () => ({
-	executeBotGuard: mock(async (): Promise<string> => "botguard-response-test"),
-	mintPoToken: mock(async (_token: string, id: string): Promise<string> => `pot-${id}`),
-	resetBotGuardPage: mock(async (): Promise<void> => undefined),
-}));
+mock.module("../src/botguard-page.ts", () =>
+	fakeBotGuardModule({
+		execute: async () => "botguard-response-test",
+		mint: async (_token, id) => `pot-${id}`,
+	}),
+);
 
 mock.module("../src/token-service.ts", () => ({
 	getOrRefreshSession: mock(async () => ({

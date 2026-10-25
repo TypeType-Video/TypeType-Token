@@ -1,5 +1,5 @@
 import { fetchChallenge } from "./botguard-challenge.ts";
-import { executeBotGuard, mintPoToken, resetBotGuardPage } from "./botguard-page.ts";
+import { BotGuardContext } from "./botguard-page.ts";
 import { fetchIntegrityToken, fetchVisitorData } from "./innertube.ts";
 import {
 	type PlaybackTraceContext,
@@ -30,18 +30,27 @@ let session: CachedSession | null = null;
 let sessionRefreshInFlight: Promise<CachedSession> | null = null;
 
 async function buildSession(trace?: PlaybackTraceContext): Promise<CachedSession> {
+	const context = await tracePlaybackPhase(trace, "token.botguard.page_open", () =>
+		BotGuardContext.open(),
+	);
+	try {
+		return await buildSessionIn(context, trace);
+	} catch (error) {
+		await context.close();
+		throw error;
+	}
+}
+
+async function buildSessionIn(
+	context: BotGuardContext,
+	trace?: PlaybackTraceContext,
+): Promise<CachedSession> {
 	const visitorData = await tracePlaybackPhase(trace, "token.visitor_data.fetch", fetchVisitorData);
 	const challenge = await tracePlaybackPhase(trace, "token.botguard.challenge", () =>
 		fetchChallenge(visitorData),
 	);
-
 	const botguardResponse = await tracePlaybackPhase(trace, "token.botguard.execute", () =>
-		executeBotGuard(
-			challenge.interpreterScript,
-			challenge.program,
-			challenge.globalName,
-			challenge.eventId,
-		),
+		context.execute(challenge),
 	);
 	const integrityTokenData = await tracePlaybackPhase(trace, "token.generate_it.fetch", () =>
 		fetchIntegrityToken(botguardResponse),
@@ -55,12 +64,13 @@ async function buildSession(trace?: PlaybackTraceContext): Promise<CachedSession
 	const visitorBoundPoToken = await tracePlaybackPhase(
 		trace,
 		"token.visitor_bound_po_token.mint",
-		() => mintPoToken(integrityToken, visitorData),
+		() => context.mint(integrityToken, visitorData),
 	);
 	const ttlMs = Math.max(1000, (integrityTokenData.estimatedTtlSecs ?? 21600) * 1000);
 	const refreshMarginMs = Math.min(EXPIRY_MARGIN_MS, Math.floor(ttlMs / 10));
 
 	return {
+		context,
 		visitorData,
 		visitorBoundPoToken,
 		integrityToken,
@@ -70,19 +80,19 @@ async function buildSession(trace?: PlaybackTraceContext): Promise<CachedSession
 	};
 }
 
+async function retireSession(retired: CachedSession): Promise<void> {
+	await Promise.allSettled(retired.videoBoundPoTokenRequests.values());
+	await retired.context.close();
+}
+
 function startSessionRefresh(trace?: PlaybackTraceContext): Promise<CachedSession> {
 	const previousSession = session;
 	playbackTraceEvent(trace, "session.refresh.start");
 	const promise = Promise.resolve()
-		.then(async () => {
-			if (previousSession !== null) {
-				await Promise.allSettled(previousSession.videoBoundPoTokenRequests.values());
-			}
-			await tracePlaybackPhase(trace, "token.botguard.page_reset", resetBotGuardPage);
-			return buildSession(trace);
-		})
+		.then(() => buildSession(trace))
 		.then((s) => {
 			session = s;
+			if (previousSession !== null) void retireSession(previousSession);
 			playbackTraceEvent(trace, "session.refresh.end", { outcome: "ok" });
 			return s;
 		})
