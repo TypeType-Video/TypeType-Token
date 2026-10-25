@@ -13,6 +13,7 @@ import {
 } from "./remote-login-routes.ts";
 import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
+import { startTokenWarmup } from "./token-warmup.ts";
 import { TvPoTokenMinter } from "./tv-po-token.ts";
 import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
 import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
@@ -24,7 +25,8 @@ const remoteLoginConfig = readRemoteLoginConfig();
 const remoteLoginManager = new RemoteLoginManager(remoteLoginConfig);
 const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLoginConfig);
 const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
-const tvPoTokenRoutes = createTvPoTokenRoutes(new TvPoTokenMinter());
+const tvPoTokenMinter = new TvPoTokenMinter();
+const tvPoTokenRoutes = createTvPoTokenRoutes(tvPoTokenMinter);
 
 export async function handler(
 	req: Request,
@@ -148,6 +150,7 @@ export async function handler(
 }
 
 if (import.meta.main) {
+	startTokenWarmup(tvPoTokenMinter);
 	Bun.serve<RemoteLoginWebSocketData>({
 		port: PORT,
 		fetch: handler,

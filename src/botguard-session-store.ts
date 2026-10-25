@@ -51,6 +51,13 @@ export class BotGuardSessionStore {
 		return this.refresh(trace);
 	}
 
+	async refreshBefore(leadMs: number): Promise<CachedSession> {
+		const usable = this.usable();
+		if (usable !== null && usable.expiresAt - this.now() > leadMs) return usable;
+		if (usable !== null && this.refreshedRecently()) return usable;
+		return this.refresh();
+	}
+
 	refresh(trace?: PlaybackTraceContext): Promise<CachedSession> {
 		if (this.refreshing !== null) return this.refreshing;
 		playbackTraceEvent(trace, "session.refresh.start");

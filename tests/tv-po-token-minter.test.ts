@@ -44,6 +44,23 @@ describe("TV PO token minter", () => {
 		expect((await tv.get(true, now + 5_000)).poToken).toBe(first.poToken);
 	});
 
+	it("mints at startup and keeps the token warm only while it is used", async () => {
+		const tv = minter();
+		const now = Date.now();
+		const minted = mints;
+
+		const nextCheck = await tv.keepWarm(60_000, now);
+		expect(mints).toBe(minted + 1);
+		expect(nextCheck).toBe(now + 9 * 60_000);
+
+		await tv.keepWarm(60_000, now + 9 * 60_000);
+		expect(mints).toBe(minted + 1);
+
+		await tv.get(false, now + 9 * 60_000);
+		await tv.keepWarm(60_000, now + 9 * 60_000);
+		expect(mints).toBe(minted + 2);
+	});
+
 	it("reports a failed mint", async () => {
 		const tv = new TvPoTokenMinter(async () => {
 			throw new Error("browser unavailable");

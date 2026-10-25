@@ -39,6 +39,11 @@ export function sessionStatus(): BotGuardSessionStatus {
 	return sessions.status();
 }
 
+export async function keepSessionWarm(leadMs: number): Promise<number> {
+	const session = await sessions.refreshBefore(leadMs);
+	return session.expiresAt - leadMs;
+}
+
 async function withCurrentSession<T>(
 	forceRefresh: boolean,
 	trace: PlaybackTraceContext | undefined,

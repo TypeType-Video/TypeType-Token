@@ -46,6 +46,7 @@ export class TvPoTokenMinter {
 	private inflight: Promise<TvPoToken> | null = null;
 	private mintedAt = 0;
 	private lastError: string | null = null;
+	private servedSinceMint = false;
 
 	constructor(
 		private readonly openContext: BotGuardContextOpener = (userAgent) =>
@@ -53,10 +54,28 @@ export class TvPoTokenMinter {
 	) {}
 
 	async get(forceRefresh = false, now = Date.now()): Promise<TvPoToken> {
+		const token = this.reusable(forceRefresh, now) ?? (await this.mintShared(now));
+		this.servedSinceMint = true;
+		return token;
+	}
+
+	async keepWarm(leadMs: number, now = Date.now()): Promise<number> {
 		const cached = this.cached;
-		if (cached && cached.expiresAt > now && !(forceRefresh && this.mayRefresh(now))) {
-			return cached;
-		}
+		if (cached !== null && cached.expiresAt - now > leadMs) return cached.expiresAt - leadMs;
+		if (cached !== null && !this.servedSinceMint) return now + TTL_MS - leadMs;
+		this.servedSinceMint = false;
+		return (await this.mintShared(now)).expiresAt - leadMs;
+	}
+
+	status(): TvPoTokenStatus {
+		return {
+			expiresAt: this.cached?.expiresAt ?? null,
+			lastMintAt: this.mintedAt > 0 ? this.mintedAt : null,
+			lastError: this.lastError,
+		};
+	}
+
+	private mintShared(now: number): Promise<TvPoToken> {
 		if (this.inflight) return this.inflight;
 		this.inflight = this.mint(now)
 			.then(
@@ -75,16 +94,11 @@ export class TvPoTokenMinter {
 		return this.inflight;
 	}
 
-	status(): TvPoTokenStatus {
-		return {
-			expiresAt: this.cached?.expiresAt ?? null,
-			lastMintAt: this.mintedAt > 0 ? this.mintedAt : null,
-			lastError: this.lastError,
-		};
-	}
-
-	private mayRefresh(now: number): boolean {
-		return now - this.mintedAt >= FORCED_REFRESH_COOLDOWN_MS;
+	private reusable(forceRefresh: boolean, now: number): TvPoToken | null {
+		const cached = this.cached;
+		if (cached === null || cached.expiresAt <= now) return null;
+		const mayRefresh = now - this.mintedAt >= FORCED_REFRESH_COOLDOWN_MS;
+		return forceRefresh && mayRefresh ? null : cached;
 	}
 
 	private async mint(now: number): Promise<TvPoToken> {

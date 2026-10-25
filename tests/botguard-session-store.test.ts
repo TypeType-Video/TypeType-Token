@@ -56,3 +56,29 @@ describe("BotGuard session store status", () => {
 		});
 	});
 });
+
+describe("BotGuard session store warm-up", () => {
+	it("builds once at startup and again only inside the refresh lead", async () => {
+		let now = 1_000_000;
+		let builds = 0;
+		const store = new BotGuardSessionStore({
+			build: async () => {
+				builds += 1;
+				return session(now + 600_000);
+			},
+			retire: async () => undefined,
+			now: () => now,
+		});
+
+		const warm = await store.refreshBefore(120_000);
+		expect(builds).toBe(1);
+		now += 300_000;
+		expect(await store.refreshBefore(120_000)).toBe(warm);
+		now += 200_000;
+		const refreshed = await store.refreshBefore(120_000);
+
+		expect(builds).toBe(2);
+		expect(refreshed).not.toBe(warm);
+		expect(warm.retired).toBe(true);
+	});
+});
