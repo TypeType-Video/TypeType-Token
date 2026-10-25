@@ -12,6 +12,8 @@ const fetchSessionPoTokens = mock(
 		videoBoundPoToken: `video-${videoId}`,
 		poToken: "visitor-token",
 		streamingPot: `video-${videoId}`,
+		generation: "generation-1",
+		expiresAt: 1_000,
 		sessionBoundPoToken: `session-${sessionBinding}`,
 	}),
 );

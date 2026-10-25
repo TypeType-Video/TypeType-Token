@@ -16,6 +16,7 @@ export class RetiredBotGuardSessionError extends Error {
 
 export type CachedSession = {
 	context: BotGuardContext;
+	generation: string;
 	retired: boolean;
 	visitorData: string;
 	visitorBoundPoToken: string;

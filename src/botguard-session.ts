@@ -5,6 +5,8 @@ import { type PlaybackTraceContext, tracePlaybackPhase } from "./playback-diagno
 import type { CachedSession } from "./video-bound-po-token.ts";
 
 const EXPIRY_MARGIN_MS = 10 * 60 * 1000;
+const BOOT_ID = crypto.randomUUID().slice(0, 8);
+let generations = 0;
 
 export async function buildBotGuardSession(
 	trace?: PlaybackTraceContext,
@@ -49,6 +51,7 @@ async function buildSessionIn(
 
 	return {
 		context,
+		generation: `${BOOT_ID}-${++generations}`,
 		retired: false,
 		visitorData,
 		visitorBoundPoToken,

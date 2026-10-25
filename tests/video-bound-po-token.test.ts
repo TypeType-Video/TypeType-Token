@@ -12,6 +12,7 @@ function retiredSession(mint: (token: string, id: string) => Promise<string>): C
 	const context = new FakeBotGuardContext({ execute: async () => "response", mint });
 	return {
 		context: context as unknown as BotGuardContext,
+		generation: "generation-1",
 		retired: true,
 		visitorData: "visitor",
 		visitorBoundPoToken: "visitor-token",

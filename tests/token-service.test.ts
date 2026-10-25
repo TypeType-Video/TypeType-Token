@@ -94,6 +94,8 @@ describe("fetchPoToken", () => {
 		expect(result.videoBoundPoToken).toBe("pot-video-id-1");
 		expect(result.poToken).toBe(`pot-${VISITOR_DATA}`);
 		expect(result.streamingPot).toBe("pot-video-id-1");
+		expect(result.generation).toMatch(/^[0-9a-f]{8}-\d+$/);
+		expect(result.expiresAt).toBeGreaterThan(Date.now());
 		expect(mockExecuteBotGuard.mock.calls.length).toBe(1);
 	});
 
@@ -126,6 +128,7 @@ describe("fetchPoToken", () => {
 
 	it("refreshes the BotGuard session when requested", async () => {
 		const callsBefore = mockExecuteBotGuard.mock.calls.length;
+		const previous = await fetchPoToken("video-id-before-refresh");
 		const refreshedVisitorData = `${VISITOR_DATA}-refresh`;
 		currentVisitorData = refreshedVisitorData;
 		passForcedRefreshCooldown();
@@ -136,6 +139,8 @@ describe("fetchPoToken", () => {
 		expect(result.visitorData).toBe(refreshedVisitorData);
 		expect(result.visitorBoundPoToken).toBe(`pot-${refreshedVisitorData}`);
 		expect(result.videoBoundPoToken).toBe("pot-video-id-refresh");
+		expect(result.generation).not.toBe(previous.generation);
+		expect((await fetchPoToken("video-id-after-refresh")).generation).toBe(result.generation);
 	});
 
 	it("mints a distinct videoBoundPoToken per videoId", async () => {

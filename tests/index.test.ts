@@ -13,6 +13,8 @@ const mockFetchPoToken = mock(
 		videoBoundPoToken: `video-bound-${videoId}`,
 		poToken: "visitor-bound-token",
 		streamingPot: `video-bound-${videoId}`,
+		generation: "generation-1",
+		expiresAt: 1_000,
 	}),
 );
 const mockFetchYoutubeSabrSession = mock(
@@ -28,6 +30,7 @@ const mockFetchYoutubeSabrSession = mock(
 		visitorData: "visitor-data",
 		poToken: "visitor-bound-token",
 		streamingPot: `video-bound-${videoId}`,
+		tokenGeneration: "generation-1",
 		serverAbrStreamingUrl: "https://example.test/sabr",
 		rawServerAbrStreamingUrl: "https://example.test/raw-sabr",
 		hlsManifestUrl: "https://example.test/live.m3u8",

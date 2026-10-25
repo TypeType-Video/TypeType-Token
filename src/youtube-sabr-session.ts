@@ -181,6 +181,7 @@ async function buildYoutubeSabrSession(
 		visitorData: tokens.visitorData,
 		poToken: tokens.visitorBoundPoToken,
 		streamingPot: tokens.streamingPot,
+		tokenGeneration: tokens.generation,
 		serverAbrStreamingUrl,
 		rawServerAbrStreamingUrl,
 		hlsManifestUrl: videoInfo.streaming_data?.hls_manifest_url ?? null,

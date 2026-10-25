@@ -15,6 +15,8 @@ export type TokenResult = {
 	videoBoundPoToken: string;
 	poToken: string;
 	streamingPot: string;
+	generation: string;
+	expiresAt: number;
 };
 
 export type SessionTokenResult = TokenResult & {
@@ -89,12 +91,14 @@ export async function fetchSessionPoTokens(
 }
 
 function tokenResult(currentSession: CachedSession, videoBoundPoToken: string): TokenResult {
-	const { visitorData, visitorBoundPoToken } = currentSession;
+	const { visitorData, visitorBoundPoToken, generation, expiresAt } = currentSession;
 	return {
 		visitorData,
 		visitorBoundPoToken,
 		videoBoundPoToken,
 		poToken: visitorBoundPoToken,
 		streamingPot: videoBoundPoToken,
+		generation,
+		expiresAt,
 	};
 }
