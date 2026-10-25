@@ -22,7 +22,10 @@ export function parseSessionCookies(raw: string): SessionCookie[] {
 	const unique = new Map<string, SessionCookie>();
 	for (const cookie of parsed) {
 		if (!cookie.name || !cookie.value || !isAllowedDomain(cookie.domain)) continue;
-		unique.set([cookie.domain, cookie.includeSubdomains, cookie.path, cookie.name].join("|"), cookie);
+		unique.set(
+			[cookie.domain, cookie.includeSubdomains, cookie.path, cookie.name].join("|"),
+			cookie,
+		);
 	}
 	return [...unique.values()].slice(0, MAX_COOKIES);
 }
@@ -52,16 +55,18 @@ function parseHeader(raw: string): SessionCookie[] {
 		.flatMap((part) => {
 			const index = part.indexOf("=");
 			return index > 0
-				? [{
-						name: part.slice(0, index).trim(),
-						value: part.slice(index + 1).trim(),
-						domain: DEFAULT_DOMAIN,
-						includeSubdomains: true,
-						path: "/",
-						expires: -1,
-						secure: true,
-						httpOnly: true,
-					}]
+				? [
+						{
+							name: part.slice(0, index).trim(),
+							value: part.slice(index + 1).trim(),
+							domain: DEFAULT_DOMAIN,
+							includeSubdomains: true,
+							path: "/",
+							expires: -1,
+							secure: true,
+							httpOnly: true,
+						},
+					]
 				: [];
 		});
 }
@@ -76,16 +81,18 @@ function parseNetscape(raw: string): SessionCookie[] {
 		const path = fields[2].trim();
 		if (!domain || !path.startsWith("/")) return [];
 		const expiresAt = Number(fields[4]);
-		return [{
-			name: fields[5].trim(),
-			value: fields[6].trim(),
-			domain,
-			includeSubdomains: fields[1].trim().toUpperCase() === "TRUE",
-			path,
-			expires: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : -1,
-			secure: fields[3].trim().toUpperCase() === "TRUE",
-			httpOnly,
-		}];
+		return [
+			{
+				name: fields[5].trim(),
+				value: fields[6].trim(),
+				domain,
+				includeSubdomains: fields[1].trim().toUpperCase() === "TRUE",
+				path,
+				expires: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : -1,
+				secure: fields[3].trim().toUpperCase() === "TRUE",
+				httpOnly,
+			},
+		];
 	});
 }
 
