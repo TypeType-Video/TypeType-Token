@@ -12,6 +12,12 @@ import {
 const TTL_MS = 10 * 60_000;
 const FORCED_REFRESH_COOLDOWN_MS = 30_000;
 
+export type TvPoTokenStatus = {
+	expiresAt: number | null;
+	lastMintAt: number | null;
+	lastError: string | null;
+};
+
 export type TvPoToken = {
 	poToken: string;
 	visitorData: string;
@@ -39,6 +45,7 @@ export class TvPoTokenMinter {
 	private cached: TvPoToken | null = null;
 	private inflight: Promise<TvPoToken> | null = null;
 	private mintedAt = 0;
+	private lastError: string | null = null;
 
 	constructor(
 		private readonly openContext: BotGuardContextOpener = (userAgent) =>
@@ -51,10 +58,29 @@ export class TvPoTokenMinter {
 			return cached;
 		}
 		if (this.inflight) return this.inflight;
-		this.inflight = this.mint(now).finally(() => {
-			this.inflight = null;
-		});
+		this.inflight = this.mint(now)
+			.then(
+				(value) => {
+					this.lastError = null;
+					return value;
+				},
+				(error: unknown) => {
+					this.lastError = error instanceof Error ? error.message : String(error);
+					throw error;
+				},
+			)
+			.finally(() => {
+				this.inflight = null;
+			});
 		return this.inflight;
+	}
+
+	status(): TvPoTokenStatus {
+		return {
+			expiresAt: this.cached?.expiresAt ?? null,
+			lastMintAt: this.mintedAt > 0 ? this.mintedAt : null,
+			lastError: this.lastError,
+		};
 	}
 
 	private mayRefresh(now: number): boolean {

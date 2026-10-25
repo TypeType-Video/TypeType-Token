@@ -1,6 +1,6 @@
 import { BotGuardContextClosedError } from "./botguard-page.ts";
 import { buildBotGuardSession, retireBotGuardSession } from "./botguard-session.ts";
-import { BotGuardSessionStore } from "./botguard-session-store.ts";
+import { type BotGuardSessionStatus, BotGuardSessionStore } from "./botguard-session-store.ts";
 import { type PlaybackTraceContext, playbackTraceEvent } from "./playback-diagnostics.ts";
 import {
 	type CachedSession,
@@ -33,6 +33,10 @@ export async function getOrRefreshSession(
 	trace?: PlaybackTraceContext,
 ): Promise<CachedSession> {
 	return sessions.get(forceRefresh, trace);
+}
+
+export function sessionStatus(): BotGuardSessionStatus {
+	return sessions.status();
 }
 
 async function withCurrentSession<T>(

@@ -44,6 +44,19 @@ describe("TV PO token minter", () => {
 		expect((await tv.get(true, now + 5_000)).poToken).toBe(first.poToken);
 	});
 
+	it("reports a failed mint", async () => {
+		const tv = new TvPoTokenMinter(async () => {
+			throw new Error("browser unavailable");
+		});
+
+		await expect(tv.get()).rejects.toThrow("browser unavailable");
+		expect(tv.status()).toEqual({
+			expiresAt: null,
+			lastMintAt: null,
+			lastError: "browser unavailable",
+		});
+	});
+
 	it("forwards the refresh query to the minter", async () => {
 		const forced: boolean[] = [];
 		const recording = {

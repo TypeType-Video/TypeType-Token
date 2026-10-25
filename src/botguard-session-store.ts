@@ -3,6 +3,15 @@ import type { CachedSession } from "./video-bound-po-token.ts";
 
 const FORCED_REFRESH_COOLDOWN_MS = 30_000;
 
+export type BotGuardSessionStatus = {
+	generation: string | null;
+	expiresAt: number | null;
+	usable: boolean;
+	refreshing: boolean;
+	lastRefreshAt: number | null;
+	lastError: string | null;
+};
+
 type BotGuardSessionStoreDependencies = {
 	build: (trace?: PlaybackTraceContext) => Promise<CachedSession>;
 	retire: (session: CachedSession) => Promise<void>;
@@ -14,6 +23,7 @@ export class BotGuardSessionStore {
 	private current: CachedSession | null = null;
 	private refreshing: Promise<CachedSession> | null = null;
 	private lastRefreshAt: number | null = null;
+	private lastError: string | null = null;
 	private readonly now: () => number;
 	private readonly forcedRefreshCooldownMs: number;
 
@@ -50,6 +60,7 @@ export class BotGuardSessionStore {
 				const previous = this.current;
 				this.current = session;
 				this.lastRefreshAt = this.now();
+				this.lastError = null;
 				if (previous !== null) {
 					previous.retired = true;
 					void this.dependencies.retire(previous);
@@ -58,6 +69,7 @@ export class BotGuardSessionStore {
 				return session;
 			})
 			.catch((error: unknown) => {
+				this.lastError = error instanceof Error ? error.message : String(error);
 				playbackTraceEvent(trace, "session.refresh.end", {
 					outcome: "error",
 					errorType: error instanceof Error ? error.name : "unknown",
@@ -69,6 +81,17 @@ export class BotGuardSessionStore {
 			});
 		this.refreshing = refresh;
 		return refresh;
+	}
+
+	status(): BotGuardSessionStatus {
+		return {
+			generation: this.current?.generation ?? null,
+			expiresAt: this.current?.expiresAt ?? null,
+			usable: this.usable() !== null,
+			refreshing: this.refreshing !== null,
+			lastRefreshAt: this.lastRefreshAt,
+			lastError: this.lastError,
+		};
 	}
 
 	private refreshedRecently(): boolean {
