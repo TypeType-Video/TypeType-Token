@@ -1,0 +1,79 @@
+import { beforeAll, describe, expect, it, mock } from "bun:test";
+import type { IntegrityTokenData } from "bgutils-js/shared-types";
+import type { TokenResult } from "../src/token-service.ts";
+import { fakeBotGuardModule } from "./botguard-context-fixtures.ts";
+
+let visitorRequests = 0;
+let visitorGate: Promise<void> | null = null;
+let markVisitorRequested: (() => void) | undefined;
+
+mock.module("../src/botguard-page.ts", () =>
+	fakeBotGuardModule({
+		execute: async () => "botguard-response",
+		mint: async (_token, id) => `pot-${id}`,
+	}),
+);
+mock.module("../src/botguard-challenge.ts", () => ({
+	WEB_USER_AGENT: "web-agent",
+	WEB_CLIENT_VERSION: "2.0",
+	fetchChallenge: async () => ({
+		interpreterScript: "interpreter",
+		program: "program",
+		globalName: "vm",
+		eventId: "event",
+	}),
+}));
+mock.module("../src/innertube.ts", () => ({
+	fetchVisitorData: async (): Promise<string> => {
+		const visitor = `visitor-${++visitorRequests}`;
+		markVisitorRequested?.();
+		if (visitorGate !== null) await visitorGate;
+		return visitor;
+	},
+	fetchIntegrityToken: async (): Promise<IntegrityTokenData> => ({
+		integrityToken: "integrity-token",
+		estimatedTtlSecs: 21600,
+	}),
+}));
+
+let fetchPoToken: (videoId: string, forceRefresh?: boolean) => Promise<TokenResult>;
+
+function holdNextRefresh(): { requested: Promise<void>; release: () => void } {
+	let release: () => void = () => undefined;
+	visitorGate = new Promise<void>((resolve) => {
+		release = () => {
+			visitorGate = null;
+			resolve();
+		};
+	});
+	const requested = new Promise<void>((resolve) => {
+		markVisitorRequested = resolve;
+	});
+	return { requested, release };
+}
+
+async function settlesWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T | "pending"> {
+	return Promise.race([promise, Bun.sleep(timeoutMs).then(() => "pending" as const)]);
+}
+
+describe("token session refresh while serving", () => {
+	beforeAll(async () => {
+		// @ts-expect-error Bun uses the query to isolate this module instance.
+		const module = await import("../src/token-service.ts?token-service-stale-test");
+		fetchPoToken = module.fetchPoToken;
+	});
+
+	it("keeps serving the unexpired session while a refresh builds", async () => {
+		const first = await fetchPoToken("first-video");
+		const hold = holdNextRefresh();
+		const forced = fetchPoToken("forced-video", true);
+		await hold.requested;
+
+		const served = await settlesWithin(fetchPoToken("served-video"), 200);
+		hold.release();
+
+		expect(served).not.toBe("pending");
+		expect(served === "pending" ? null : served.visitorData).toBe(first.visitorData);
+		expect((await forced).visitorData).not.toBe(first.visitorData);
+	});
+});

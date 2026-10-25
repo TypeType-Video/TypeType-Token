@@ -1,4 +1,5 @@
 import { buildBotGuardSession, retireBotGuardSession } from "./botguard-session.ts";
+import { BotGuardSessionStore } from "./botguard-session-store.ts";
 import { type PlaybackTraceContext, playbackTraceEvent } from "./playback-diagnostics.ts";
 import {
 	type CachedSession,
@@ -18,48 +19,16 @@ export type SessionTokenResult = TokenResult & {
 	sessionBoundPoToken: string;
 };
 
-let session: CachedSession | null = null;
-let sessionRefreshInFlight: Promise<CachedSession> | null = null;
-
-function startSessionRefresh(trace?: PlaybackTraceContext): Promise<CachedSession> {
-	const previousSession = session;
-	playbackTraceEvent(trace, "session.refresh.start");
-	const promise = Promise.resolve()
-		.then(() => buildBotGuardSession(trace))
-		.then((s) => {
-			session = s;
-			if (previousSession !== null) void retireBotGuardSession(previousSession);
-			playbackTraceEvent(trace, "session.refresh.end", { outcome: "ok" });
-			return s;
-		})
-		.catch((error: unknown) => {
-			playbackTraceEvent(trace, "session.refresh.end", {
-				outcome: "error",
-				errorType: error instanceof Error ? error.name : "unknown",
-			});
-			throw error;
-		})
-		.finally(() => {
-			if (sessionRefreshInFlight === promise) sessionRefreshInFlight = null;
-		});
-	sessionRefreshInFlight = promise;
-	return promise;
-}
+const sessions = new BotGuardSessionStore({
+	build: buildBotGuardSession,
+	retire: retireBotGuardSession,
+});
 
 export async function getOrRefreshSession(
 	forceRefresh = false,
 	trace?: PlaybackTraceContext,
 ): Promise<CachedSession> {
-	if (sessionRefreshInFlight !== null) {
-		playbackTraceEvent(trace, "session.refresh.singleflight_join");
-		return sessionRefreshInFlight;
-	}
-	if (!forceRefresh && session !== null && Date.now() < session.expiresAt) {
-		playbackTraceEvent(trace, "session.cache_hit");
-		return session;
-	}
-	playbackTraceEvent(trace, forceRefresh ? "session.cache_bypass" : "session.cache_miss");
-	return startSessionRefresh(trace);
+	return sessions.get(forceRefresh, trace);
 }
 
 export async function fetchPoToken(
