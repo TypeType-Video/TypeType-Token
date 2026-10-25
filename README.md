@@ -37,6 +37,7 @@ TypeType does not rely on third-party decoder endpoints. Player decoding stays o
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Service health |
+| `GET` | `/ready` | Token readiness, `503` until the BotGuard session and TV token are warm |
 | `GET` | `/version` | Build information |
 | `GET` | `/potoken?videoId=<id>` | PO token data for a YouTube video |
 | `GET` | `/subtitles?videoId=<id>` | Subtitle track metadata |
