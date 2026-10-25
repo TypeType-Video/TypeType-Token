@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { parseIntegrityToken, parseRequestKey, parseTvAppInfo } from "../src/tv-po-token.ts";
+import {
+	parseIntegrityToken,
+	parseRequestKey,
+	parseTvAppInfo,
+} from "../src/tv-po-token-requests.ts";
 
 const PAGE =
 	'<script>{"EVENT_ID":"3vPWarn6NobmmLAP58-A0AI","LIVING_ROOM_PO_TOKEN_ID":"wpeaWfYpTp8\\u003d","visitorData":"Cgs5azZUVjRo"}</script>';

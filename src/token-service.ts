@@ -1,18 +1,13 @@
-import { fetchChallenge } from "./botguard-challenge.ts";
-import { executeBotGuard, mintPoToken, resetBotGuardPage } from "./botguard-page.ts";
-import { fetchIntegrityToken, fetchVisitorData } from "./innertube.ts";
-import {
-	type PlaybackTraceContext,
-	playbackTraceEvent,
-	tracePlaybackPhase,
-} from "./playback-diagnostics.ts";
+import { BotGuardContextClosedError } from "./botguard-page.ts";
+import { buildBotGuardSession, retireBotGuardSession } from "./botguard-session.ts";
+import { type BotGuardSessionStatus, BotGuardSessionStore } from "./botguard-session-store.ts";
+import { type PlaybackTraceContext, playbackTraceEvent } from "./playback-diagnostics.ts";
 import {
 	type CachedSession,
 	getVideoBoundPoToken,
+	RetiredBotGuardSessionError,
 	refreshVideoBoundPoToken,
 } from "./video-bound-po-token.ts";
-
-const EXPIRY_MARGIN_MS = 10 * 60 * 1000;
 
 export type TokenResult = {
 	visitorData: string;
@@ -20,100 +15,54 @@ export type TokenResult = {
 	videoBoundPoToken: string;
 	poToken: string;
 	streamingPot: string;
+	generation: string;
+	expiresAt: number;
 };
 
 export type SessionTokenResult = TokenResult & {
 	sessionBoundPoToken: string;
 };
 
-let session: CachedSession | null = null;
-let sessionRefreshInFlight: Promise<CachedSession> | null = null;
-
-async function buildSession(trace?: PlaybackTraceContext): Promise<CachedSession> {
-	const visitorData = await tracePlaybackPhase(trace, "token.visitor_data.fetch", fetchVisitorData);
-	const challenge = await tracePlaybackPhase(trace, "token.botguard.challenge", () =>
-		fetchChallenge(visitorData),
-	);
-
-	const botguardResponse = await tracePlaybackPhase(trace, "token.botguard.execute", () =>
-		executeBotGuard(
-			challenge.interpreterScript,
-			challenge.program,
-			challenge.globalName,
-			challenge.eventId,
-		),
-	);
-	const integrityTokenData = await tracePlaybackPhase(trace, "token.generate_it.fetch", () =>
-		fetchIntegrityToken(botguardResponse),
-	);
-
-	const integrityToken = integrityTokenData.integrityToken;
-	if (!integrityToken) {
-		throw new Error("integrityToken missing from GenerateIT response");
-	}
-
-	const visitorBoundPoToken = await tracePlaybackPhase(
-		trace,
-		"token.visitor_bound_po_token.mint",
-		() => mintPoToken(integrityToken, visitorData),
-	);
-	const ttlMs = Math.max(1000, (integrityTokenData.estimatedTtlSecs ?? 21600) * 1000);
-	const refreshMarginMs = Math.min(EXPIRY_MARGIN_MS, Math.floor(ttlMs / 10));
-
-	return {
-		visitorData,
-		visitorBoundPoToken,
-		integrityToken,
-		expiresAt: Date.now() + ttlMs - refreshMarginMs,
-		videoBoundPoTokens: new Map(),
-		videoBoundPoTokenRequests: new Map(),
-	};
-}
-
-function startSessionRefresh(trace?: PlaybackTraceContext): Promise<CachedSession> {
-	const previousSession = session;
-	playbackTraceEvent(trace, "session.refresh.start");
-	const promise = Promise.resolve()
-		.then(async () => {
-			if (previousSession !== null) {
-				await Promise.allSettled(previousSession.videoBoundPoTokenRequests.values());
-			}
-			await tracePlaybackPhase(trace, "token.botguard.page_reset", resetBotGuardPage);
-			return buildSession(trace);
-		})
-		.then((s) => {
-			session = s;
-			playbackTraceEvent(trace, "session.refresh.end", { outcome: "ok" });
-			return s;
-		})
-		.catch((error: unknown) => {
-			playbackTraceEvent(trace, "session.refresh.end", {
-				outcome: "error",
-				errorType: error instanceof Error ? error.name : "unknown",
-			});
-			throw error;
-		})
-		.finally(() => {
-			if (sessionRefreshInFlight === promise) sessionRefreshInFlight = null;
-		});
-	sessionRefreshInFlight = promise;
-	return promise;
-}
+const sessions = new BotGuardSessionStore({
+	build: buildBotGuardSession,
+	retire: retireBotGuardSession,
+});
 
 export async function getOrRefreshSession(
 	forceRefresh = false,
 	trace?: PlaybackTraceContext,
 ): Promise<CachedSession> {
-	if (sessionRefreshInFlight !== null) {
-		playbackTraceEvent(trace, "session.refresh.singleflight_join");
-		return sessionRefreshInFlight;
+	return sessions.get(forceRefresh, trace);
+}
+
+export function sessionStatus(): BotGuardSessionStatus {
+	return sessions.status();
+}
+
+export async function keepSessionWarm(leadMs: number): Promise<number> {
+	const session = await sessions.refreshBefore(leadMs);
+	return session.expiresAt - leadMs;
+}
+
+async function withCurrentSession<T>(
+	forceRefresh: boolean,
+	trace: PlaybackTraceContext | undefined,
+	use: (session: CachedSession) => Promise<T>,
+): Promise<T> {
+	const session = await sessions.get(forceRefresh, trace);
+	try {
+		return await use(session);
+	} catch (error) {
+		if (!isReplacedSessionError(error)) throw error;
+		playbackTraceEvent(trace, "session.replaced_retry");
+		return use(await sessions.get(false, trace));
 	}
-	if (!forceRefresh && session !== null && Date.now() < session.expiresAt) {
-		playbackTraceEvent(trace, "session.cache_hit");
-		return session;
-	}
-	playbackTraceEvent(trace, forceRefresh ? "session.cache_bypass" : "session.cache_miss");
-	return startSessionRefresh(trace);
+}
+
+function isReplacedSessionError(error: unknown): boolean {
+	return (
+		error instanceof RetiredBotGuardSessionError || error instanceof BotGuardContextClosedError
+	);
 }
 
 export async function fetchPoToken(
@@ -123,11 +72,12 @@ export async function fetchPoToken(
 	trace?: PlaybackTraceContext,
 ): Promise<TokenResult> {
 	playbackTraceEvent(trace, "token.video_request", { forceRefresh, refreshVideo });
-	const currentSession = await getOrRefreshSession(forceRefresh, trace);
-	const videoBoundPoToken = refreshVideo
-		? await refreshVideoBoundPoToken(currentSession, videoId, trace)
-		: await getVideoBoundPoToken(currentSession, videoId, trace);
-	return tokenResult(currentSession, videoBoundPoToken);
+	return withCurrentSession(forceRefresh, trace, async (session) => {
+		const videoBoundPoToken = refreshVideo
+			? await refreshVideoBoundPoToken(session, videoId, trace)
+			: await getVideoBoundPoToken(session, videoId, trace);
+		return tokenResult(session, videoBoundPoToken);
+	});
 }
 
 export async function fetchSessionPoTokens(
@@ -137,27 +87,27 @@ export async function fetchSessionPoTokens(
 	trace?: PlaybackTraceContext,
 ): Promise<SessionTokenResult> {
 	playbackTraceEvent(trace, "token.session_request", { refreshVideo });
-	const currentSession = await getOrRefreshSession(false, trace);
-	const [videoBoundPoToken, sessionBoundPoToken] = await Promise.all([
-		refreshVideo
-			? refreshVideoBoundPoToken(currentSession, videoId, trace)
-			: getVideoBoundPoToken(currentSession, videoId, trace),
-		getVideoBoundPoToken(currentSession, sessionBinding, trace, "session_binding"),
-	]);
-	playbackTraceEvent(trace, "token.session_tokens.ready");
-	return {
-		...tokenResult(currentSession, videoBoundPoToken),
-		sessionBoundPoToken,
-	};
+	return withCurrentSession(false, trace, async (session) => {
+		const [videoBoundPoToken, sessionBoundPoToken] = await Promise.all([
+			refreshVideo
+				? refreshVideoBoundPoToken(session, videoId, trace)
+				: getVideoBoundPoToken(session, videoId, trace),
+			getVideoBoundPoToken(session, sessionBinding, trace, "session_binding"),
+		]);
+		playbackTraceEvent(trace, "token.session_tokens.ready");
+		return { ...tokenResult(session, videoBoundPoToken), sessionBoundPoToken };
+	});
 }
 
 function tokenResult(currentSession: CachedSession, videoBoundPoToken: string): TokenResult {
-	const { visitorData, visitorBoundPoToken } = currentSession;
+	const { visitorData, visitorBoundPoToken, generation, expiresAt } = currentSession;
 	return {
 		visitorData,
 		visitorBoundPoToken,
 		videoBoundPoToken,
 		poToken: visitorBoundPoToken,
 		streamingPot: videoBoundPoToken,
+		generation,
+		expiresAt,
 	};
 }

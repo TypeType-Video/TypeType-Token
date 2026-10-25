@@ -1,24 +1,36 @@
-import { buildInfo } from "./build-info.ts";
+import { isBotGuardBrowserConnected } from "./botguard-browser.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { createDeviceAuthRoutes } from "./device-auth-routes.ts";
 import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 import { handlePoTokenRequest } from "./po-token-routes.ts";
 import { readRemoteLoginConfig } from "./remote-login-config.ts";
+import { createServiceStatusRoutes } from "./service-status-routes.ts";
 import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
+import { sessionStatus } from "./token-service.ts";
+import { startTokenWarmup } from "./token-warmup.ts";
 import { TvPoTokenMinter } from "./tv-po-token.ts";
 import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
-import { decodeYoutubePlayerBatch } from "./youtube-player-decoder.ts";
+import { createYoutubePlayerDecoderRoutes } from "./youtube-player-decoder-routes.ts";
 import { fetchYoutubeSabrSession } from "./youtube-sabr-session.ts";
 import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
 
 const PORT = 8081;
 const remoteLoginConfig = readRemoteLoginConfig();
 const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
-const tvPoTokenRoutes = createTvPoTokenRoutes(new TvPoTokenMinter());
+const tvPoTokenMinter = new TvPoTokenMinter();
+const tvPoTokenRoutes = createTvPoTokenRoutes(tvPoTokenMinter);
+const decoderRoutes = createYoutubePlayerDecoderRoutes();
+const serviceStatusRoutes = createServiceStatusRoutes({
+	browserConnected: isBotGuardBrowserConnected,
+	session: sessionStatus,
+	tv: () => tvPoTokenMinter.status(),
+});
 
 export async function handler(req: Request): Promise<Response> {
 	const url = new URL(req.url);
+	const statusResponse = serviceStatusRoutes(req, url);
+	if (statusResponse !== null) return statusResponse;
 	const deviceAuthResponse = await deviceAuthRoutes(req, url);
 	if (deviceAuthResponse !== null) return deviceAuthResponse;
 	const tvPoTokenResponse = await tvPoTokenRoutes(req, url);
@@ -27,6 +39,8 @@ export async function handler(req: Request): Promise<Response> {
 	if (subtitleResponse !== null) return subtitleResponse;
 	const poTokenResponse = await handlePoTokenRequest(req, url);
 	if (poTokenResponse !== null) return poTokenResponse;
+	const decoderResponse = await decoderRoutes(req, url);
+	if (decoderResponse !== null) return decoderResponse;
 
 	if (req.method === "POST" && url.pathname === "/session-binding") {
 		const body = (await req.json().catch(() => null)) as { cookies?: unknown } | null;
@@ -110,29 +124,10 @@ export async function handler(req: Request): Promise<Response> {
 		}
 	}
 
-	if (req.method === "POST" && url.pathname === "/youtube/player/decoder") {
-		try {
-			const body = (await req.json().catch(() => ({}))) as Parameters<
-				typeof decodeYoutubePlayerBatch
-			>[0];
-			return Response.json(await decodeYoutubePlayerBatch(body));
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Internal error";
-			return Response.json({ error: message }, { status: 500 });
-		}
-	}
-
-	if (req.method === "GET" && url.pathname === "/health") {
-		return Response.json({ status: "ok" });
-	}
-
-	if (req.method === "GET" && url.pathname === "/version") {
-		return Response.json(buildInfo);
-	}
-
 	return new Response("Not Found", { status: 404 });
 }
 
 if (import.meta.main) {
+	startTokenWarmup(tvPoTokenMinter);
 	Bun.serve({ port: PORT, fetch: handler });
 }

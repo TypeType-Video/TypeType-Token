@@ -5,6 +5,7 @@ import type { TokenResult } from "../src/token-service.ts";
 import type { RawCaptionTrack } from "../src/youtube-caption-tracks.ts";
 import type { YoutubePlayerDecodeResponse } from "../src/youtube-player-decoder.ts";
 import type { YoutubeSabrSession } from "../src/youtube-sabr-types.ts";
+import { tokenServiceModule } from "./token-service-fixtures.ts";
 
 const mockFetchPoToken = mock(
 	async (videoId: string, _forceRefresh = false, _refreshVideo = false): Promise<TokenResult> => ({
@@ -13,6 +14,8 @@ const mockFetchPoToken = mock(
 		videoBoundPoToken: `video-bound-${videoId}`,
 		poToken: "visitor-bound-token",
 		streamingPot: `video-bound-${videoId}`,
+		generation: "generation-1",
+		expiresAt: 1_000,
 	}),
 );
 const mockFetchYoutubeSabrSession = mock(
@@ -28,6 +31,7 @@ const mockFetchYoutubeSabrSession = mock(
 		visitorData: "visitor-data",
 		poToken: "visitor-bound-token",
 		streamingPot: `video-bound-${videoId}`,
+		tokenGeneration: "generation-1",
 		serverAbrStreamingUrl: "https://example.test/sabr",
 		rawServerAbrStreamingUrl: "https://example.test/raw-sabr",
 		hlsManifestUrl: "https://example.test/live.m3u8",
@@ -52,13 +56,15 @@ const mockFetchYoutubeSabrSession = mock(
 	}),
 );
 
-mock.module("../src/token-service.ts", () => ({
-	fetchPoToken: mockFetchPoToken,
-	fetchSessionPoTokens: mock(async () => ({
-		...(await mockFetchPoToken("abc")),
-		sessionBoundPoToken: "session-bound-token",
-	})),
-}));
+mock.module("../src/token-service.ts", () =>
+	tokenServiceModule({
+		fetchPoToken: mockFetchPoToken,
+		fetchSessionPoTokens: mock(async () => ({
+			...(await mockFetchPoToken("abc")),
+			sessionBoundPoToken: "session-bound-token",
+		})),
+	}),
+);
 
 mock.module("../src/innertube.ts", () => ({
 	fetchVisitorData: mock(async (): Promise<string> => "visitor-data"),
@@ -93,6 +99,14 @@ describe("handler", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { status: string };
 		expect(body).toEqual({ status: "ok" });
+	});
+
+	it("GET /ready returns 503 before the tokens are warm", async () => {
+		const { handler } = await import("../src/index.ts");
+		const res = await handler(new Request("http://localhost:8081/ready"));
+
+		expect(res?.status).toBe(503);
+		expect(await res?.json()).toMatchObject({ status: "not_ready" });
 	});
 
 	it("GET /version returns build metadata", async () => {

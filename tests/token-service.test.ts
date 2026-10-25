@@ -1,25 +1,25 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock, setSystemTime } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
+import type { BotGuardChallenge } from "../src/botguard-challenge.ts";
 import type { SessionTokenResult, TokenResult } from "../src/token-service.ts";
+import { fakeBotGuardModule, passForcedRefreshCooldown } from "./botguard-context-fixtures.ts";
 
 const VISITOR_DATA = "visitor-data-test-123";
 const INTEGRITY_TOKEN = "integrity-token-test-xyz";
 let currentVisitorData = VISITOR_DATA;
 
 const mockExecuteBotGuard = mock(
-	async (_script: string, _prog: string, _name: string, _eventId: string): Promise<string> =>
-		"botguard-response-test",
+	async (_challenge: BotGuardChallenge): Promise<string> => "botguard-response-test",
 );
 const mockMintPoToken = mock(async (_token: string, id: string): Promise<string> => `pot-${id}`);
-const mockResetBotGuardPage = mock(async (): Promise<void> => undefined);
 
-mock.module("../src/botguard-page.ts", () => ({
-	executeBotGuard: mockExecuteBotGuard,
-	mintPoToken: mockMintPoToken,
-	resetBotGuardPage: mockResetBotGuardPage,
-}));
+mock.module("../src/botguard-page.ts", () =>
+	fakeBotGuardModule({ execute: mockExecuteBotGuard, mint: mockMintPoToken }),
+);
 
 mock.module("../src/botguard-challenge.ts", () => ({
+	WEB_USER_AGENT: "web-agent",
+	WEB_CLIENT_VERSION: "2.0",
 	fetchChallenge: mock(async (_visitorData: string) => ({
 		interpreterScript: "/* noop */",
 		program: "program-test",
@@ -57,6 +57,10 @@ describe("fetchPoToken", () => {
 		fetchSessionPoTokens = module.fetchSessionPoTokens;
 	});
 
+	afterAll(() => {
+		setSystemTime();
+	});
+
 	it("does not call buildSession twice on concurrent requests", async () => {
 		const [r1, r2] = await Promise.all([
 			fetchPoToken("concurrent-1"),
@@ -74,12 +78,12 @@ describe("fetchPoToken", () => {
 		expect(r1.streamingPot).toBe("pot-concurrent-1");
 		expect(r2.streamingPot).toBe("pot-concurrent-2");
 		expect(mockExecuteBotGuard.mock.calls.length).toBe(1);
-		expect(mockExecuteBotGuard).toHaveBeenCalledWith(
-			"/* noop */",
-			"program-test",
-			"vm_test",
-			"event-test",
-		);
+		expect(mockExecuteBotGuard).toHaveBeenCalledWith({
+			interpreterScript: "/* noop */",
+			program: "program-test",
+			globalName: "vm_test",
+			eventId: "event-test",
+		});
 	});
 
 	it("returns correct token structure on first call", async () => {
@@ -90,6 +94,8 @@ describe("fetchPoToken", () => {
 		expect(result.videoBoundPoToken).toBe("pot-video-id-1");
 		expect(result.poToken).toBe(`pot-${VISITOR_DATA}`);
 		expect(result.streamingPot).toBe("pot-video-id-1");
+		expect(result.generation).toMatch(/^[0-9a-f]{8}-\d+$/);
+		expect(result.expiresAt).toBeGreaterThan(Date.now());
 		expect(mockExecuteBotGuard.mock.calls.length).toBe(1);
 	});
 
@@ -122,8 +128,10 @@ describe("fetchPoToken", () => {
 
 	it("refreshes the BotGuard session when requested", async () => {
 		const callsBefore = mockExecuteBotGuard.mock.calls.length;
+		const previous = await fetchPoToken("video-id-before-refresh");
 		const refreshedVisitorData = `${VISITOR_DATA}-refresh`;
 		currentVisitorData = refreshedVisitorData;
+		passForcedRefreshCooldown();
 
 		const result = await fetchPoToken("video-id-refresh", true);
 
@@ -131,6 +139,8 @@ describe("fetchPoToken", () => {
 		expect(result.visitorData).toBe(refreshedVisitorData);
 		expect(result.visitorBoundPoToken).toBe(`pot-${refreshedVisitorData}`);
 		expect(result.videoBoundPoToken).toBe("pot-video-id-refresh");
+		expect(result.generation).not.toBe(previous.generation);
+		expect((await fetchPoToken("video-id-after-refresh")).generation).toBe(result.generation);
 	});
 
 	it("mints a distinct videoBoundPoToken per videoId", async () => {

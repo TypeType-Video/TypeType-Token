@@ -1,6 +1,11 @@
-import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock, setSystemTime } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { TokenResult } from "../src/token-service.ts";
+import {
+	type FakeBotGuardContext,
+	fakeBotGuardModule,
+	passForcedRefreshCooldown,
+} from "./botguard-context-fixtures.ts";
 
 let markVisitorDataStarted: (() => void) | undefined;
 const visitorDataStarted = new Promise<void>((resolve) => {
@@ -40,18 +45,23 @@ const mockMintPoToken = mock(async (_token: string, id: string): Promise<string>
 	}
 	return `pot-${id}`;
 });
-const mockResetBotGuardPage = mock(async (): Promise<void> => {
-	refreshEvents.push("page-reset");
-});
+const openedContexts: FakeBotGuardContext[] = [];
 let visitorDataRequests = 0;
 
-mock.module("../src/botguard-page.ts", () => ({
-	executeBotGuard: mockExecuteBotGuard,
-	mintPoToken: mockMintPoToken,
-	resetBotGuardPage: mockResetBotGuardPage,
-}));
+mock.module("../src/botguard-page.ts", () =>
+	fakeBotGuardModule(
+		{
+			execute: mockExecuteBotGuard,
+			mint: mockMintPoToken,
+			close: () => refreshEvents.push("page-close"),
+		},
+		openedContexts,
+	),
+);
 
 mock.module("../src/botguard-challenge.ts", () => ({
+	WEB_USER_AGENT: "web-agent",
+	WEB_CLIENT_VERSION: "2.0",
 	fetchChallenge: mock(async () => ({
 		interpreterScript: "interpreter",
 		program: "program",
@@ -90,6 +100,10 @@ describe("token refresh concurrency", () => {
 		fetchPoToken = module.fetchPoToken;
 	});
 
+	afterAll(() => {
+		setSystemTime();
+	});
+
 	it("joins a forced refresh to an active session refresh", async () => {
 		const regular = fetchPoToken("regular-video");
 		await visitorDataStarted;
@@ -101,7 +115,7 @@ describe("token refresh concurrency", () => {
 		expect(regularResult.visitorData).toBe("visitor-session");
 		expect(forcedResult.visitorData).toBe("visitor-session");
 		expect(visitorDataRequests).toBe(1);
-		expect(mockResetBotGuardPage.mock.calls.length).toBe(1);
+		expect(openedContexts.length).toBe(1);
 		expect(mockExecuteBotGuard.mock.calls.length).toBe(1);
 	});
 
@@ -127,26 +141,31 @@ describe("token refresh concurrency", () => {
 		expect(sequentialResult.videoBoundPoToken).not.toBe(firstResult.videoBoundPoToken);
 	});
 
-	it("waits for active video token mints before resetting BotGuard", async () => {
+	it("closes the previous BotGuard page only after its active mints finish", async () => {
 		const racingMintStarted = new Promise<void>((resolve) => {
 			markRacingMintStarted = resolve;
 		});
 		const eventsBefore = refreshEvents.length;
+		const previousContext = openedContexts.at(-1);
 		const activeMint = fetchPoToken("racing-video");
 		await racingMintStarted;
+		passForcedRefreshCooldown();
 		const forcedRefresh = fetchPoToken("forced-after-race", true);
-		const joinedRefresh = fetchPoToken("joined-during-refresh");
-		await Promise.resolve();
+		await forcedRefresh;
 		expect(refreshEvents.slice(eventsBefore)).toEqual(["mint-started"]);
+		expect(previousContext?.closed).toBe(false);
 
 		releaseRacingMint?.();
-		await Promise.all([activeMint, forcedRefresh, joinedRefresh]);
+		await activeMint;
+		await Bun.sleep(0);
 
 		expect(refreshEvents.slice(eventsBefore)).toEqual([
 			"mint-started",
 			"mint-finished",
-			"page-reset",
+			"page-close",
 		]);
+		expect(previousContext?.closed).toBe(true);
+		expect(openedContexts.at(-1)?.closed).toBe(false);
 	});
 
 	it("bounds the video token cache", async () => {

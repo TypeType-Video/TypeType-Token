@@ -11,6 +11,8 @@ describe("YouTube SABR identity refresh", () => {
 			videoBoundPoToken: "new-media-token",
 			poToken: "new-player-token",
 			streamingPot: "new-media-token",
+			generation: "generation-2",
+			expiresAt: 1_000,
 		} satisfies TokenResult;
 		const refresher = new YoutubeSabrIdentityRefresher<string>({
 			refreshTokens: async (videoId) => {

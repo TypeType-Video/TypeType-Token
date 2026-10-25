@@ -29,7 +29,7 @@ export function createYoutubeSabrPerformance(
 			stage = phase;
 			const phaseStartedAt = performance.now();
 			try {
-				return await tracePlaybackPhase(trace, `sabr.${phase}`, load);
+				return await tracePlaybackPhase(trace, "sabr." + phase, load);
 			} finally {
 				durations[phase] += Math.round(performance.now() - phaseStartedAt);
 			}
