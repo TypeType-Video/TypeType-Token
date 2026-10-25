@@ -1,16 +1,9 @@
-import type { Server } from "bun";
 import { isBotGuardBrowserConnected } from "./botguard-browser.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { createDeviceAuthRoutes } from "./device-auth-routes.ts";
 import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
 import { handlePoTokenRequest } from "./po-token-routes.ts";
 import { readRemoteLoginConfig } from "./remote-login-config.ts";
-import { RemoteLoginManager } from "./remote-login-manager.ts";
-import {
-	createRemoteLoginConnection,
-	createRemoteLoginHandler,
-	type RemoteLoginWebSocketData,
-} from "./remote-login-routes.ts";
 import { createServiceStatusRoutes } from "./service-status-routes.ts";
 import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
@@ -24,8 +17,6 @@ import type { YoutubeSabrClient } from "./youtube-sabr-types.ts";
 
 const PORT = 8081;
 const remoteLoginConfig = readRemoteLoginConfig();
-const remoteLoginManager = new RemoteLoginManager(remoteLoginConfig);
-const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLoginConfig);
 const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
 const tvPoTokenMinter = new TvPoTokenMinter();
 const tvPoTokenRoutes = createTvPoTokenRoutes(tvPoTokenMinter);
@@ -36,15 +27,10 @@ const serviceStatusRoutes = createServiceStatusRoutes({
 	tv: () => tvPoTokenMinter.status(),
 });
 
-export async function handler(
-	req: Request,
-	server?: Server<RemoteLoginWebSocketData>,
-): Promise<Response | undefined> {
+export async function handler(req: Request): Promise<Response> {
 	const url = new URL(req.url);
 	const statusResponse = serviceStatusRoutes(req, url);
 	if (statusResponse !== null) return statusResponse;
-	const remoteLoginResponse = await remoteLoginHandler(req, url, server);
-	if (remoteLoginResponse !== null) return remoteLoginResponse;
 	const deviceAuthResponse = await deviceAuthRoutes(req, url);
 	if (deviceAuthResponse !== null) return deviceAuthResponse;
 	const tvPoTokenResponse = await tvPoTokenRoutes(req, url);
@@ -143,19 +129,5 @@ export async function handler(
 
 if (import.meta.main) {
 	startTokenWarmup(tvPoTokenMinter);
-	Bun.serve<RemoteLoginWebSocketData>({
-		port: PORT,
-		fetch: handler,
-		websocket: {
-			open: (ws) => {
-				remoteLoginManager.attach(ws.data.sessionId, createRemoteLoginConnection(ws));
-			},
-			message: (ws, message) => {
-				if (typeof message === "string") remoteLoginManager.message(ws.data.sessionId, message);
-			},
-			close: (ws) => {
-				remoteLoginManager.disconnect(ws.data.sessionId);
-			},
-		},
-	});
+	Bun.serve({ port: PORT, fetch: handler });
 }
