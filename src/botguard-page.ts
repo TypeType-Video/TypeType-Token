@@ -1,19 +1,18 @@
 import type { Browser, Page } from "playwright";
-import { chromium } from "playwright";
+import { botGuardBrowser } from "./botguard-browser.ts";
 import { WEB_USER_AGENT } from "./botguard-challenge.ts";
 
 const ROUTE = "https://www.youtube.com/__bgp__";
 const BLANK_HTML = "<!DOCTYPE html><html><body></body></html>";
 
-let browser: Browser | null = null;
+let pagesBrowser: Browser | null = null;
 const pages = new Map<string, Page>();
 
 async function ensurePage(userAgent: string = WEB_USER_AGENT): Promise<Page> {
-	if (!browser) {
-		browser = await chromium.launch({
-			headless: false,
-			args: ["--disable-blink-features=AutomationControlled"],
-		});
+	const browser = await botGuardBrowser();
+	if (pagesBrowser !== browser) {
+		pages.clear();
+		pagesBrowser = browser;
 	}
 	let active = pages.get(userAgent);
 	if (!active || active.isClosed()) {
