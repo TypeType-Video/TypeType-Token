@@ -10,6 +10,7 @@ import {
 } from "./tv-po-token-requests.ts";
 
 const TTL_MS = 10 * 60_000;
+const FORCED_REFRESH_COOLDOWN_MS = 30_000;
 
 export type TvPoToken = {
 	poToken: string;
@@ -37,19 +38,27 @@ async function mintInContext(
 export class TvPoTokenMinter {
 	private cached: TvPoToken | null = null;
 	private inflight: Promise<TvPoToken> | null = null;
+	private mintedAt = 0;
 
 	constructor(
 		private readonly openContext: BotGuardContextOpener = (userAgent) =>
 			BotGuardContext.open(userAgent),
 	) {}
 
-	async get(now = Date.now()): Promise<TvPoToken> {
-		if (this.cached && this.cached.expiresAt > now) return this.cached;
+	async get(forceRefresh = false, now = Date.now()): Promise<TvPoToken> {
+		const cached = this.cached;
+		if (cached && cached.expiresAt > now && !(forceRefresh && this.mayRefresh(now))) {
+			return cached;
+		}
 		if (this.inflight) return this.inflight;
 		this.inflight = this.mint(now).finally(() => {
 			this.inflight = null;
 		});
 		return this.inflight;
+	}
+
+	private mayRefresh(now: number): boolean {
+		return now - this.mintedAt >= FORCED_REFRESH_COOLDOWN_MS;
 	}
 
 	private async mint(now: number): Promise<TvPoToken> {
@@ -73,6 +82,7 @@ export class TvPoTokenMinter {
 			expiresAt: now + TTL_MS,
 		};
 		this.cached = value;
+		this.mintedAt = now;
 		return value;
 	}
 }
