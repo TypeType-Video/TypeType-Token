@@ -46,4 +46,17 @@ describe("BotGuard browser", () => {
 
 		await expect(context.mint("integrity", "video")).rejects.toThrow("BotGuard context is closed");
 	});
+
+	it("closes a page whose evaluation never settles", async () => {
+		const evaluate = chromium.evaluate;
+		chromium.evaluate = () => new Promise<unknown>(() => undefined);
+		try {
+			const context = await BotGuardContext.open(undefined, 20);
+
+			await expect(context.execute(CHALLENGE)).rejects.toThrow("BotGuard evaluation timed out");
+			expect(context.isClosed()).toBe(true);
+		} finally {
+			chromium.evaluate = evaluate;
+		}
+	});
 });

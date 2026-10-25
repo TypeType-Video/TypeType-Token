@@ -2,9 +2,11 @@ import type { Browser, Page } from "playwright";
 import { botGuardBrowser } from "./botguard-browser.ts";
 import { type BotGuardChallenge, WEB_USER_AGENT } from "./botguard-challenge.ts";
 import { mintPoTokenInPage, runBotGuardInPage } from "./botguard-page-scripts.ts";
+import { TimeoutError, withTimeout } from "./with-timeout.ts";
 
 const ROUTE = "https://www.youtube.com/__bgp__";
 const BLANK_HTML = "<!DOCTYPE html><html><body></body></html>";
+const EVALUATE_TIMEOUT_MS = 15_000;
 
 export class BotGuardContextClosedError extends Error {
 	constructor() {
@@ -17,9 +19,13 @@ export class BotGuardContext {
 	private constructor(
 		private readonly browser: Browser,
 		private readonly page: Page,
+		private readonly evaluateTimeoutMs: number,
 	) {}
 
-	static async open(userAgent: string = WEB_USER_AGENT): Promise<BotGuardContext> {
+	static async open(
+		userAgent: string = WEB_USER_AGENT,
+		evaluateTimeoutMs = EVALUATE_TIMEOUT_MS,
+	): Promise<BotGuardContext> {
 		const browser = await botGuardBrowser();
 		const page = await browser.newPage({ userAgent });
 		try {
@@ -31,7 +37,7 @@ export class BotGuardContext {
 			await page.close();
 			throw error;
 		}
-		return new BotGuardContext(browser, page);
+		return new BotGuardContext(browser, page, evaluateTimeoutMs);
 	}
 
 	isClosed(): boolean {
@@ -61,6 +67,15 @@ export class BotGuardContext {
 
 	private async evaluate<T>(run: (page: Page) => Promise<T>): Promise<T> {
 		if (this.isClosed()) throw new BotGuardContextClosedError();
-		return run(this.page);
+		try {
+			return await withTimeout(
+				run(this.page),
+				this.evaluateTimeoutMs,
+				"BotGuard evaluation timed out",
+			);
+		} catch (error) {
+			if (error instanceof TimeoutError) await this.close();
+			throw error;
+		}
 	}
 }
