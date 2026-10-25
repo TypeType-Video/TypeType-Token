@@ -1,5 +1,5 @@
 import type { Server } from "bun";
-import { buildInfo } from "./build-info.ts";
+import { isBotGuardBrowserConnected } from "./botguard-browser.ts";
 import { DeviceAuth } from "./device-auth.ts";
 import { createDeviceAuthRoutes } from "./device-auth-routes.ts";
 import { playbackTraceFromRequest, tracePlaybackRequest } from "./playback-diagnostics.ts";
@@ -11,8 +11,10 @@ import {
 	createRemoteLoginHandler,
 	type RemoteLoginWebSocketData,
 } from "./remote-login-routes.ts";
+import { createServiceStatusRoutes } from "./service-status-routes.ts";
 import { importSessionBinding } from "./session-binding.ts";
 import { handleSubtitleRequest } from "./subtitle-routes.ts";
+import { sessionStatus } from "./token-service.ts";
 import { startTokenWarmup } from "./token-warmup.ts";
 import { TvPoTokenMinter } from "./tv-po-token.ts";
 import { createTvPoTokenRoutes } from "./tv-po-token-routes.ts";
@@ -27,12 +29,19 @@ const remoteLoginHandler = createRemoteLoginHandler(remoteLoginManager, remoteLo
 const deviceAuthRoutes = createDeviceAuthRoutes(new DeviceAuth());
 const tvPoTokenMinter = new TvPoTokenMinter();
 const tvPoTokenRoutes = createTvPoTokenRoutes(tvPoTokenMinter);
+const serviceStatusRoutes = createServiceStatusRoutes({
+	browserConnected: isBotGuardBrowserConnected,
+	session: sessionStatus,
+	tv: () => tvPoTokenMinter.status(),
+});
 
 export async function handler(
 	req: Request,
 	server?: Server<RemoteLoginWebSocketData>,
 ): Promise<Response | undefined> {
 	const url = new URL(req.url);
+	const statusResponse = serviceStatusRoutes(req, url);
+	if (statusResponse !== null) return statusResponse;
 	const remoteLoginResponse = await remoteLoginHandler(req, url, server);
 	if (remoteLoginResponse !== null) return remoteLoginResponse;
 	const deviceAuthResponse = await deviceAuthRoutes(req, url);
@@ -126,14 +135,6 @@ export async function handler(
 			const message = error instanceof Error ? error.message : "Internal error";
 			return Response.json({ error: message }, { status: 500 });
 		}
-	}
-
-	if (req.method === "GET" && url.pathname === "/health") {
-		return Response.json({ status: "ok" });
-	}
-
-	if (req.method === "GET" && url.pathname === "/version") {
-		return Response.json(buildInfo);
 	}
 
 	return new Response("Not Found", { status: 404 });

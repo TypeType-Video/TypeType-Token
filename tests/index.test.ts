@@ -101,6 +101,14 @@ describe("handler", () => {
 		expect(body).toEqual({ status: "ok" });
 	});
 
+	it("GET /ready returns 503 before the tokens are warm", async () => {
+		const { handler } = await import("../src/index.ts");
+		const res = await handler(new Request("http://localhost:8081/ready"));
+
+		expect(res?.status).toBe(503);
+		expect(await res?.json()).toMatchObject({ status: "not_ready" });
+	});
+
 	it("GET /version returns build metadata", async () => {
 		const { handler } = await import("../src/index.ts");
 		const res = await handler(new Request("http://localhost:8081/version"));
