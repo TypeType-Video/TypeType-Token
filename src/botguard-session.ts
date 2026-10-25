@@ -49,6 +49,7 @@ async function buildSessionIn(
 
 	return {
 		context,
+		retired: false,
 		visitorData,
 		visitorBoundPoToken,
 		integrityToken,

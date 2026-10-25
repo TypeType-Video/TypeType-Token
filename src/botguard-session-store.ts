@@ -38,7 +38,10 @@ export class BotGuardSessionStore {
 			.then((session) => {
 				const previous = this.current;
 				this.current = session;
-				if (previous !== null) void this.dependencies.retire(previous);
+				if (previous !== null) {
+					previous.retired = true;
+					void this.dependencies.retire(previous);
+				}
 				playbackTraceEvent(trace, "session.refresh.end", { outcome: "ok" });
 				return session;
 			})

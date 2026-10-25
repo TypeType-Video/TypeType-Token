@@ -1,17 +1,29 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { TokenResult } from "../src/token-service.ts";
-import { fakeBotGuardModule } from "./botguard-context-fixtures.ts";
+import {
+	type FakeBotGuardContext,
+	FakeBotGuardContextClosedError,
+	fakeBotGuardModule,
+} from "./botguard-context-fixtures.ts";
 
 let visitorRequests = 0;
 let visitorGate: Promise<void> | null = null;
 let markVisitorRequested: (() => void) | undefined;
+let closePageOnNextMint = false;
+const openedContexts: FakeBotGuardContext[] = [];
+
+async function mint(_token: string, id: string): Promise<string> {
+	if (closePageOnNextMint && id === "closed-page-video") {
+		closePageOnNextMint = false;
+		await openedContexts.at(-1)?.close();
+		throw new FakeBotGuardContextClosedError();
+	}
+	return `pot-${id}`;
+}
 
 mock.module("../src/botguard-page.ts", () =>
-	fakeBotGuardModule({
-		execute: async () => "botguard-response",
-		mint: async (_token, id) => `pot-${id}`,
-	}),
+	fakeBotGuardModule({ execute: async () => "botguard-response", mint }, openedContexts),
 );
 mock.module("../src/botguard-challenge.ts", () => ({
 	WEB_USER_AGENT: "web-agent",
@@ -75,5 +87,15 @@ describe("token session refresh while serving", () => {
 		expect(served).not.toBe("pending");
 		expect(served === "pending" ? null : served.visitorData).toBe(first.visitorData);
 		expect((await forced).visitorData).not.toBe(first.visitorData);
+	});
+
+	it("mints on a new session when the session page closed before minting", async () => {
+		const before = await fetchPoToken("before-close-video");
+		closePageOnNextMint = true;
+
+		const result = await fetchPoToken("closed-page-video");
+
+		expect(result.videoBoundPoToken).toBe("pot-closed-page-video");
+		expect(result.visitorData).not.toBe(before.visitorData);
 	});
 });

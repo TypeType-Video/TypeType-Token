@@ -7,8 +7,16 @@ import {
 
 const MAX_CACHED_VIDEO_TOKENS = 512;
 
+export class RetiredBotGuardSessionError extends Error {
+	constructor() {
+		super("BotGuard session was replaced");
+		this.name = "RetiredBotGuardSessionError";
+	}
+}
+
 export type CachedSession = {
 	context: BotGuardContext;
+	retired: boolean;
 	visitorData: string;
 	visitorBoundPoToken: string;
 	integrityToken: string;
@@ -25,6 +33,7 @@ export async function getVideoBoundPoToken(
 	trace?: PlaybackTraceContext,
 	target: TokenTarget = "video",
 ): Promise<string> {
+	if (s.retired) throw new RetiredBotGuardSessionError();
 	const eventPrefix =
 		target === "session_binding" ? "token.session_bound_po_token" : "token.video_bound_po_token";
 	const cached = s.videoBoundPoTokens.get(videoId);
@@ -63,6 +72,7 @@ export async function refreshVideoBoundPoToken(
 	trace?: PlaybackTraceContext,
 	target: TokenTarget = "video",
 ): Promise<string> {
+	if (s.retired) throw new RetiredBotGuardSessionError();
 	const inFlight = s.videoBoundPoTokenRequests.get(videoId);
 	if (inFlight !== undefined) {
 		playbackTraceEvent(trace, "token.video_bound_po_token.refresh_singleflight_join", {
