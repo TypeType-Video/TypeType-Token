@@ -1,5 +1,5 @@
 import type { BotGuardChallenge } from "./botguard-challenge.ts";
-import { BotGuardContext } from "./botguard-page.ts";
+import { BotGuardContext, type BotGuardContextOpener } from "./botguard-page.ts";
 import {
 	fetchHomeEventId,
 	fetchRequestKey,
@@ -19,11 +19,12 @@ export type TvPoToken = {
 };
 
 async function mintInContext(
+	openContext: BotGuardContextOpener,
 	challenge: BotGuardChallenge,
 	requestKey: string,
 	livingRoomPoTokenId: string,
 ): Promise<string> {
-	const context = await BotGuardContext.open(TV_USER_AGENT);
+	const context = await openContext(TV_USER_AGENT);
 	try {
 		const botguardResponse = await context.execute(challenge);
 		const integrityToken = await generateIntegrityToken(requestKey, botguardResponse);
@@ -36,6 +37,11 @@ async function mintInContext(
 export class TvPoTokenMinter {
 	private cached: TvPoToken | null = null;
 	private inflight: Promise<TvPoToken> | null = null;
+
+	constructor(
+		private readonly openContext: BotGuardContextOpener = (userAgent) =>
+			BotGuardContext.open(userAgent),
+	) {}
 
 	async get(now = Date.now()): Promise<TvPoToken> {
 		if (this.cached && this.cached.expiresAt > now) return this.cached;
@@ -54,6 +60,7 @@ export class TvPoTokenMinter {
 		]);
 		const challenge = await fetchTvChallenge(requestKey);
 		const poToken = await mintInContext(
+			this.openContext,
 			{ ...challenge, eventId },
 			requestKey,
 			appInfo.livingRoomPoTokenId,

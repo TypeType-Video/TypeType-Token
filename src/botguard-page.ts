@@ -15,6 +15,8 @@ export class BotGuardContextClosedError extends Error {
 	}
 }
 
+export type BotGuardContextOpener = (userAgent?: string) => Promise<BotGuardContext>;
+
 export class BotGuardContext {
 	private constructor(
 		private readonly browser: Browser,

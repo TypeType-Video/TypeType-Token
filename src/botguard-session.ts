@@ -1,15 +1,16 @@
 import { fetchChallenge } from "./botguard-challenge.ts";
-import { BotGuardContext } from "./botguard-page.ts";
+import { BotGuardContext, type BotGuardContextOpener } from "./botguard-page.ts";
 import { fetchIntegrityToken, fetchVisitorData } from "./innertube.ts";
 import { type PlaybackTraceContext, tracePlaybackPhase } from "./playback-diagnostics.ts";
 import type { CachedSession } from "./video-bound-po-token.ts";
 
 const EXPIRY_MARGIN_MS = 10 * 60 * 1000;
 
-export async function buildBotGuardSession(trace?: PlaybackTraceContext): Promise<CachedSession> {
-	const context = await tracePlaybackPhase(trace, "token.botguard.page_open", () =>
-		BotGuardContext.open(),
-	);
+export async function buildBotGuardSession(
+	trace?: PlaybackTraceContext,
+	openContext: BotGuardContextOpener = (userAgent) => BotGuardContext.open(userAgent),
+): Promise<CachedSession> {
+	const context = await tracePlaybackPhase(trace, "token.botguard.page_open", () => openContext());
 	try {
 		return await buildSessionIn(context, trace);
 	} catch (error) {

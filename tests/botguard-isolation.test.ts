@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
-import type { TokenResult } from "../src/token-service.ts";
 import type { TvPoToken } from "../src/tv-po-token.ts";
 import { sharedChromium as chromium } from "./botguard-browser-fixtures.ts";
 
@@ -54,7 +53,9 @@ async function tvResponse(url: string): Promise<Response> {
 	return new Response('{"EVENT_ID":"home-event"}');
 }
 
-let fetchPoToken: (videoId: string, forceRefresh?: boolean) => Promise<TokenResult>;
+type Session = { visitorData: string; context: { isClosed(): boolean } };
+let buildSession: () => Promise<Session>;
+let retireSession: (session: Session) => Promise<void>;
 let mintTvToken: () => Promise<TvPoToken>;
 
 describe("BotGuard page isolation", () => {
@@ -62,17 +63,15 @@ describe("BotGuard page isolation", () => {
 		globalThis.fetch = (async (input: RequestInfo | URL) =>
 			tvResponse(String(input))) as unknown as typeof fetch;
 		// @ts-expect-error Bun uses the query to isolate this module instance.
-		const fetchModule = await import("../src/youtube-fetch.ts?botguard-isolation-test");
-		mock.module("../src/youtube-fetch.ts", () => fetchModule);
-		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const pageModule = await import("../src/botguard-page.ts?botguard-isolation-test");
-		mock.module("../src/botguard-page.ts", () => pageModule);
+		const openContext = (userAgent?: string) => pageModule.BotGuardContext.open(userAgent);
 		// @ts-expect-error Bun uses the query to isolate this module instance.
-		const tokenModule = await import("../src/token-service.ts?botguard-isolation-test");
+		const sessionModule = await import("../src/botguard-session.ts?botguard-isolation-test");
 		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const tvModule = await import("../src/tv-po-token.ts?botguard-isolation-test");
-		fetchPoToken = tokenModule.fetchPoToken;
-		const minter = new tvModule.TvPoTokenMinter();
+		buildSession = () => sessionModule.buildBotGuardSession(undefined, openContext);
+		retireSession = sessionModule.retireBotGuardSession;
+		const minter = new tvModule.TvPoTokenMinter(openContext);
 		mintTvToken = () => minter.get();
 	});
 
@@ -82,14 +81,15 @@ describe("BotGuard page isolation", () => {
 
 	it("keeps an in-flight TV mint alive while the WEB session refreshes", async () => {
 		const pagesBefore = chromium.allPages();
-		const first = await fetchPoToken("web-video");
+		const first = await buildSession();
 		const tvIntegrityTokenRequested = new Promise<void>((resolve) => {
 			markTvIntegrityTokenRequested = resolve;
 		});
 		const tvToken = mintTvToken();
 		await tvIntegrityTokenRequested;
 
-		const refreshed = await fetchPoToken("web-video", true);
+		const refreshed = await buildSession();
+		await retireSession(first);
 		releaseTvIntegrityToken?.();
 
 		expect(refreshed.visitorData).not.toBe(first.visitorData);
@@ -99,5 +99,7 @@ describe("BotGuard page isolation", () => {
 			.filter((page) => page.userAgent !== "web-agent" && !pagesBefore.includes(page));
 		expect(tvPages.length).toBe(1);
 		expect(tvPages.every((page) => page.closed)).toBe(true);
+		expect(first.context.isClosed()).toBe(true);
+		expect(refreshed.context.isClosed()).toBe(false);
 	});
 });
