@@ -20,6 +20,8 @@ mock.module("../src/botguard-page.ts", () => ({
 }));
 
 mock.module("../src/botguard-challenge.ts", () => ({
+	WEB_USER_AGENT: "web-agent",
+	WEB_CLIENT_VERSION: "2.0",
 	fetchChallenge: mock(async (_visitorData: string) => ({
 		interpreterScript: "/* noop */",
 		program: "program-test",
