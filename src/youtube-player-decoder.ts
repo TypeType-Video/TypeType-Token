@@ -1,7 +1,8 @@
 import Innertube, { UniversalCache } from "youtubei.js";
+import { youtubeFetch } from "./youtube-fetch.ts";
 import { installYoutubePlayerEvaluator } from "./youtube-player-evaluator.ts";
 import { decodeTvBatch } from "./youtube-tv-decoder.ts";
-import { getTvPlayer } from "./youtube-tv-player.ts";
+import { tvPlayers } from "./youtube-tv-player.ts";
 
 type YoutubeInnertube = Awaited<ReturnType<typeof Innertube.create>>;
 let innertubePromise: Promise<YoutubeInnertube> | undefined;
@@ -31,7 +32,9 @@ async function getInnertube(playerId: string | undefined): Promise<YoutubeInnert
 		innertubePromise = undefined;
 		loadedPlayerId = undefined;
 	}
-	const pending = innertubePromise ?? Innertube.create({ cache: new UniversalCache(true) });
+	const pending =
+		innertubePromise ??
+		Innertube.create({ cache: new UniversalCache(true), fetch: youtubeFetch as typeof fetch });
 	innertubePromise = pending;
 	try {
 		const innertube = await pending;
@@ -49,7 +52,13 @@ export async function decodeYoutubePlayerBatch(
 	const signatures = safeValues(request.signatures);
 	const throttlingParameters = safeValues(request.throttlingParameters);
 	if (request.clientName === "TVHTML5") {
-		return decodeTvBatch(await getTvPlayer(), signatures, throttlingParameters);
+		const player = await tvPlayers.get();
+		try {
+			return await decodeTvBatch(player, signatures, throttlingParameters);
+		} catch (error) {
+			tvPlayers.invalidate();
+			throw error;
+		}
 	}
 	const player = (await getInnertube(request.playerId)).session.player;
 	if (!player) throw new Error("YouTube player is unavailable");

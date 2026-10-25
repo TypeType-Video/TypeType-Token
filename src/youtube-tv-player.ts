@@ -1,4 +1,7 @@
+import { youtubeFetch } from "./youtube-fetch.ts";
+
 const TV_PAGE_URL = "https://www.youtube.com/tv";
+const TV_PLAYER_TTL_MS = 60 * 60_000;
 const TV_USER_AGENT =
 	"Mozilla/5.0 (Linux armeabi-v7a; Android 7.1.2; Fire OS 6.0) " +
 	"Cobalt/22.lts.3.306369-gold (unlike Gecko) v8/8.8.278.8-jit gles " +
@@ -11,41 +14,58 @@ export type TvPlayerData = {
 	signatureTimestamp: number;
 };
 
-let tvPlayerPromise: Promise<TvPlayerData> | undefined;
+type CachedTvPlayer = { player: Promise<TvPlayerData>; loadedAt: number };
 
-export async function getTvPlayer(): Promise<TvPlayerData> {
-	if (!tvPlayerPromise) {
-		tvPlayerPromise = loadTvPlayer().catch((error) => {
-			tvPlayerPromise = undefined;
-			throw error;
+export class TvPlayerCache {
+	private cached: CachedTvPlayer | null = null;
+
+	constructor(
+		private readonly fetcher: typeof youtubeFetch = youtubeFetch,
+		private readonly ttlMs = TV_PLAYER_TTL_MS,
+		private readonly now: () => number = Date.now,
+	) {}
+
+	get(): Promise<TvPlayerData> {
+		const cached = this.cached;
+		if (cached !== null && this.now() - cached.loadedAt < this.ttlMs) return cached.player;
+		const entry = { player: this.load(), loadedAt: this.now() };
+		this.cached = entry;
+		entry.player.catch(() => {
+			if (this.cached === entry) this.cached = null;
 		});
+		return entry.player;
 	}
-	return tvPlayerPromise;
+
+	invalidate(): void {
+		this.cached = null;
+	}
+
+	private async load(): Promise<TvPlayerData> {
+		const pageResponse = await this.fetcher(TV_PAGE_URL, {
+			headers: { "user-agent": TV_USER_AGENT },
+		});
+		if (!pageResponse.ok) {
+			throw new Error(`TV page request failed: ${pageResponse.status}`);
+		}
+		const regularPlayerUrl = extractTvPlayerUrl(await pageResponse.text());
+		if (!regularPlayerUrl) throw new Error("TV page has no player URL");
+		const playerUrl = toTclPlayerUrl(regularPlayerUrl);
+		const playerId = /\/s\/player\/([^/]+)\//.exec(playerUrl)?.[1];
+		if (!playerId) throw new Error("TV player URL has no player id");
+
+		const playerResponse = await this.fetcher(playerUrl, {
+			headers: { "user-agent": TV_USER_AGENT },
+		});
+		if (!playerResponse.ok) {
+			throw new Error(`TV player request failed: ${playerResponse.status}`);
+		}
+		const playerJs = await playerResponse.text();
+		const signatureTimestamp = Number(/signatureTimestamp:(\d+)/.exec(playerJs)?.[1] ?? 0);
+		return { playerId, playerJs, signatureTimestamp };
+	}
 }
 
-async function loadTvPlayer(): Promise<TvPlayerData> {
-	const pageResponse = await fetch(TV_PAGE_URL, {
-		headers: { "user-agent": TV_USER_AGENT },
-	});
-	if (!pageResponse.ok) {
-		throw new Error(`TV page request failed: ${pageResponse.status}`);
-	}
-	const regularPlayerUrl = extractTvPlayerUrl(await pageResponse.text());
-	if (!regularPlayerUrl) throw new Error("TV page has no player URL");
-	const playerUrl = toTclPlayerUrl(regularPlayerUrl);
-	const playerId = /\/s\/player\/([^/]+)\//.exec(playerUrl)?.[1];
-	if (!playerId) throw new Error("TV player URL has no player id");
-
-	const playerResponse = await fetch(playerUrl, {
-		headers: { "user-agent": TV_USER_AGENT },
-	});
-	if (!playerResponse.ok) {
-		throw new Error(`TV player request failed: ${playerResponse.status}`);
-	}
-	const playerJs = await playerResponse.text();
-	const signatureTimestamp = Number(/signatureTimestamp:(\d+)/.exec(playerJs)?.[1] ?? 0);
-	return { playerId, playerJs, signatureTimestamp };
-}
+export const tvPlayers = new TvPlayerCache();
 
 function extractTvPlayerUrl(page: string): string | undefined {
 	const value = /"player_url":"([^"]+)"/.exec(page)?.[1]?.replaceAll("\\/", "/");
