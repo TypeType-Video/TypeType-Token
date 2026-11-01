@@ -79,3 +79,5 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Bug repor
 ## License
 
 TypeType-Token is licensed under the [MIT License](LICENSE). Dependency notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+<!-- zoonk zoink -->
