@@ -171,6 +171,31 @@ describe("fetchSubtitles", () => {
 		expect(requested.searchParams.get("expire")).toBe("999");
 	});
 
+	it("adds the video-bound PO token to tracks that require one", async () => {
+		mockFetchCaptionTracks.mockImplementation(async () => [
+			{
+				...frTrack,
+				baseUrl: "https://m.youtube.com/api/timedtext?v=video&lang=fr&exp=xpe&expire=999",
+				vssId: ".fr",
+			},
+		]);
+		mockYoutubeFetch.mockClear();
+		mockYoutubeFetch.mockImplementationOnce(async () => new Response("WEBVTT\n\nBonjour"));
+		const { fetchSubtitleContent } = await import("../src/subtitle-content.ts");
+		const bytes = await fetchSubtitleContent(
+			"https://m.youtube.com/api/timedtext?v=video&lang=fr&exp=xpe&expire=1",
+			mockYoutubeFetch,
+		);
+		const requested = new URL(String(mockYoutubeFetch.mock.calls[0]?.[0]));
+
+		expect(new TextDecoder().decode(bytes).startsWith("WEBVTT")).toBe(true);
+		expect(mockYoutubeFetch).toHaveBeenCalledTimes(1);
+		expect(requested.searchParams.get("expire")).toBe("999");
+		expect(requested.searchParams.get("pot")).toBe("pot-video");
+		expect(requested.searchParams.get("potc")).toBe("1");
+		expect(requested.searchParams.get("c")).toBe("MWEB");
+	});
+
 	it("uses a current WEB track without replacing it through MWEB", async () => {
 		mockFetchCaptionTracks.mockClear();
 		mockYoutubeFetch.mockClear();

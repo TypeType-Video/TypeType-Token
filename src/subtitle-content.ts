@@ -32,27 +32,35 @@ export async function fetchSubtitleContent(
 	fetchYoutube: typeof youtubeFetch = youtubeFetch,
 ): Promise<Uint8Array> {
 	const request = parseSubtitleRequest(rawUrl);
-	try {
-		return await fetchVttContent(
-			refreshedVttUrl(rawUrl, request.translatedLanguageTag),
-			fetchYoutube,
-		);
-	} catch (error) {
-		if (error instanceof SubtitleFetchError && error.code === "subtitle_upstream_throttled") {
-			throw error;
+	const directUrl = refreshedVttUrl(rawUrl, request.translatedLanguageTag);
+	if (!needsPoToken(directUrl)) {
+		try {
+			return await fetchVttContent(directUrl, fetchYoutube);
+		} catch (error) {
+			if (error instanceof SubtitleFetchError && error.code === "subtitle_upstream_throttled") {
+				throw error;
+			}
 		}
 	}
 
-	const { visitorData, poToken } = await fetchPoToken(request.videoId);
+	const { visitorData, poToken, videoBoundPoToken } = await fetchPoToken(request.videoId);
 	const tracks = await fetchCaptionTracks(request.videoId, visitorData, poToken);
 	const track = selectTrack(tracks, request);
 	if (!track?.baseUrl) {
 		throw new SubtitleFetchError("Subtitle track not found", "subtitle_track_not_found", 404);
 	}
-	return fetchVttContent(
-		refreshedVttUrl(track.baseUrl, request.translatedLanguageTag),
-		fetchYoutube,
-		visitorData,
+	const url = refreshedVttUrl(track.baseUrl, request.translatedLanguageTag);
+	if (needsPoToken(url)) {
+		url.searchParams.set("pot", videoBoundPoToken);
+		url.searchParams.set("potc", "1");
+		url.searchParams.set("c", "MWEB");
+	}
+	return fetchVttContent(url, fetchYoutube, visitorData);
+}
+
+function needsPoToken(url: URL): boolean {
+	return (
+		(url.searchParams.get("exp") ?? "").split(",").includes("xpe") && !url.searchParams.has("pot")
 	);
 }
 
