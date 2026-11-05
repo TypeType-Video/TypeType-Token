@@ -8,6 +8,12 @@ const TV_CONFIG_URL =
 	"https://www.youtube.com/tv_config?action_get_config=true&client=lb4&theme=cl";
 const WAA_BASE = "https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa";
 const GOOG_API_KEY = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
+const WAA_HEADERS: Record<string, string> = {
+	"content-type": "application/json+protobuf",
+	"x-goog-api-key": GOOG_API_KEY,
+	"x-user-agent": "grpc-web-javascript/0.1",
+	"User-Agent": TV_USER_AGENT,
+};
 
 export type TvAppInfo = {
 	livingRoomPoTokenId: string;
@@ -55,12 +61,47 @@ export function parseTvChallenge(config: string): TvChallenge | null {
 }
 
 export function parseIntegrityToken(payload: unknown): { token: string; ttlSecs: number } | null {
-	if (!payload || typeof payload !== "object") return null;
-	const record = payload as Record<string, unknown>;
-	const token = record.integrityToken ?? record.websafeFallbackToken;
+	if (!Array.isArray(payload)) return null;
+	const [integrityToken, estimatedTtlSecs, , websafeFallbackToken] = payload;
+	const token = integrityToken || websafeFallbackToken;
 	if (typeof token !== "string" || !token) return null;
-	const ttl = typeof record.estimatedTtlSecs === "number" ? record.estimatedTtlSecs : 43_200;
+	const ttl = typeof estimatedTtlSecs === "number" ? estimatedTtlSecs : 43_200;
 	return { token, ttlSecs: ttl };
+}
+
+export type WaaChallenge = {
+	program: string;
+	globalName: string;
+	interpreterScript: string | null;
+	interpreterUrl: string | null;
+};
+
+export function parseWaaChallenge(payload: unknown): WaaChallenge | null {
+	if (!Array.isArray(payload)) return null;
+	let data: unknown = payload[0];
+	if (typeof payload[1] === "string") {
+		const bytes = Buffer.from(payload[1], "base64").map((byte) => (byte + 97) & 0xff);
+		try {
+			data = JSON.parse(new TextDecoder().decode(bytes));
+		} catch {
+			return null;
+		}
+	}
+	if (!Array.isArray(data)) return null;
+	const [, wrappedScript, wrappedUrl, , program, globalName] = data;
+	if (typeof program !== "string" || typeof globalName !== "string") return null;
+	return {
+		program,
+		globalName,
+		interpreterScript: firstString(wrappedScript),
+		interpreterUrl: firstString(wrappedUrl),
+	};
+}
+
+function firstString(value: unknown): string | null {
+	if (!Array.isArray(value)) return null;
+	const found = value.find((item) => typeof item === "string" && item.length > 0);
+	return typeof found === "string" ? found : null;
 }
 
 export async function fetchTvPage(): Promise<TvAppInfo> {
@@ -102,37 +143,22 @@ export async function fetchHomeEventId(): Promise<string> {
 }
 
 export async function fetchTvChallenge(requestKey: string): Promise<TvChallenge> {
-	const response = await youtubeFetch(`${WAA_BASE}/Create?key=${GOOG_API_KEY}`, {
+	const response = await youtubeFetch(`${WAA_BASE}/Create`, {
 		method: "POST",
-		headers: { "content-type": "application/json", "User-Agent": TV_USER_AGENT },
-		body: JSON.stringify({ requestKey }),
+		headers: WAA_HEADERS,
+		body: JSON.stringify([requestKey]),
 	});
 	if (!response.ok) throw new Error(`waa create failed: ${response.status}`);
-	const payload = (await response.json()) as {
-		challenge?: {
-			program?: unknown;
-			globalName?: unknown;
-			interpreterJavascript?: Record<string, unknown>;
-			interpreterUrl?: Record<string, unknown>;
-		};
-	};
-	const challenge = payload.challenge;
-	const program = challenge?.program;
-	const globalName = challenge?.globalName;
-	const embedded = challenge?.interpreterJavascript?.privateDoNotAccessOrElseSafeScriptWrappedValue;
-	if (typeof program !== "string" || typeof globalName !== "string") {
-		throw new Error("waa create returned no challenge");
-	}
+	const challenge = parseWaaChallenge(await response.json());
+	if (!challenge) throw new Error("waa create returned no challenge");
 	const script =
-		typeof embedded === "string" && embedded
-			? embedded
-			: await interpreterScript(
-					String(
-						challenge?.interpreterUrl?.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue ?? "",
-					),
-				);
+		challenge.interpreterScript ?? (await interpreterScript(challenge.interpreterUrl ?? ""));
 	if (!script) throw new Error("waa challenge has no interpreter");
-	return { program, globalName, interpreterScript: script };
+	return {
+		program: challenge.program,
+		globalName: challenge.globalName,
+		interpreterScript: script,
+	};
 }
 
 async function interpreterScript(url: string): Promise<string> {
@@ -147,10 +173,10 @@ export async function generateIntegrityToken(
 	requestKey: string,
 	botguardResponse: string,
 ): Promise<string> {
-	const response = await youtubeFetch(`${WAA_BASE}/GenerateIT?key=${GOOG_API_KEY}`, {
+	const response = await youtubeFetch(`${WAA_BASE}/GenerateIT`, {
 		method: "POST",
-		headers: { "content-type": "application/json", "User-Agent": TV_USER_AGENT },
-		body: JSON.stringify({ requestKey, botguardResponse }),
+		headers: WAA_HEADERS,
+		body: JSON.stringify([requestKey, botguardResponse]),
 	});
 	if (!response.ok) throw new Error(`waa generate failed: ${response.status}`);
 	const parsed = parseIntegrityToken(await response.json());

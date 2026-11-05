@@ -1,14 +1,6 @@
 export async function tvResponse(url: string): Promise<Response> {
-	if (url.includes("/GenerateIT")) return Response.json({ integrityToken: "tv-integrity" });
-	if (url.includes("/Create")) {
-		return Response.json({
-			challenge: {
-				program: "p",
-				globalName: "g",
-				interpreterJavascript: { privateDoNotAccessOrElseSafeScriptWrappedValue: "s" },
-			},
-		});
-	}
+	if (url.includes("/GenerateIT")) return Response.json(["tv-integrity", 43_200, 21_600]);
+	if (url.includes("/Create")) return Response.json([["message", ["s"], null, "hash", "p", "g"]]);
 	if (url.includes("tv_config")) return new Response('{"challengeRequestKey":"request-key"}');
 	if (url.endsWith("/tv")) {
 		return new Response(

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
 import type { IntegrityTokenData } from "bgutils-js/shared-types";
 import type { TvPoToken } from "../src/tv-po-token.ts";
 import { sharedChromium as chromium } from "./botguard-browser-fixtures.ts";
+import { tvResponse as sharedTvResponse } from "./tv-po-token-fixtures.ts";
 
 const originalFetch = globalThis.fetch;
 let releaseTvIntegrityToken: (() => void) | undefined;
@@ -33,24 +34,8 @@ async function tvResponse(url: string): Promise<Response> {
 		await new Promise<void>((resolve) => {
 			releaseTvIntegrityToken = resolve;
 		});
-		return Response.json({ integrityToken: "tv-integrity" });
 	}
-	if (url.includes("/Create")) {
-		return Response.json({
-			challenge: {
-				program: "p",
-				globalName: "g",
-				interpreterJavascript: { privateDoNotAccessOrElseSafeScriptWrappedValue: "s" },
-			},
-		});
-	}
-	if (url.includes("tv_config")) return new Response('{"challengeRequestKey":"request-key"}');
-	if (url.endsWith("/tv")) {
-		return new Response(
-			'{"EVENT_ID":"tv-event","LIVING_ROOM_PO_TOKEN_ID":"living-room","visitorData":"tv-visitor"}',
-		);
-	}
-	return new Response('{"EVENT_ID":"home-event"}');
+	return sharedTvResponse(url);
 }
 
 type Session = { visitorData: string; context: { isClosed(): boolean } };
