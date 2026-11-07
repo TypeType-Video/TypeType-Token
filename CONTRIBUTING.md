@@ -12,7 +12,7 @@ HTTP extraction and user data belong in [TypeType-Server](https://github.com/Typ
 
 ## Set up the project
 
-Use Bun 1.3.14. Live BotGuard and remote-login flows also require a Playwright-compatible Chromium installation.
+Use Bun 1.4.4. Live BotGuard and remote-login flows also require a Playwright-compatible Chromium installation.
 
 ```sh
 git switch dev

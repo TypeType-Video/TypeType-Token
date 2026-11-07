@@ -25,7 +25,7 @@ TypeType does not rely on third-party decoder endpoints. Player decoding stays o
 
 | Role | Technology |
 | --- | --- |
-| Runtime and package manager | Bun 1.3.14 |
+| Runtime and package manager | Bun 1.4.4 |
 | HTTP server | `Bun.serve()` |
 | Browser runtime | Playwright Chromium |
 | Cache | In-memory BotGuard and token state |
@@ -50,7 +50,7 @@ Remote-login routes are disabled unless configured by the TypeType stack. They r
 
 Requirements:
 
-- Bun 1.3.14
+- Bun 1.4.4
 - A Playwright-compatible Chromium installation for live token and login flows
 
 ```sh
