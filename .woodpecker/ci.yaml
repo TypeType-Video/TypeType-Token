@@ -14,7 +14,7 @@ when:
 
 steps:
   - name: quality
-    image: oven/bun:1.4.2-slim@sha256:debbe76858f2e398d2937c1eceeb82c571ac1fcd78aadf00e9634578ac2b5ef7
+    image: oven/bun:1.4.4-slim@sha256:13b43f8bb2c63f5d89c56205c4279b85620363296a00ada33ff7ad568f3688e7
     environment:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     commands:
