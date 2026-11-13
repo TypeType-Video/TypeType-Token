@@ -8,6 +8,7 @@ import {
 	cacheYoutubeChannelAvatar,
 	getCachedYoutubeChannelAvatar,
 } from "./youtube-channel-avatar-cache.ts";
+import { decipherHlsManifestUrl } from "./youtube-hls-manifest-url.ts";
 import {
 	getYoutubeInnertube,
 	isRejectedAnonymousSession,
@@ -143,6 +144,11 @@ async function buildYoutubeSabrSession(
 				innertube.session.context.client.clientVersion,
 			)
 		: undefined;
+	const player = innertube.session.player;
+	const hlsManifestUrl = await decipherHlsManifestUrl(
+		videoInfo.streaming_data?.hls_manifest_url,
+		player ? (url) => player.decipher(url) : undefined,
+	);
 	const videoPlaybackUstreamerConfig =
 		videoInfo.player_config?.media_common_config.media_ustreamer_request_config
 			?.video_playback_ustreamer_config;
@@ -184,7 +190,7 @@ async function buildYoutubeSabrSession(
 		tokenGeneration: tokens.generation,
 		serverAbrStreamingUrl,
 		rawServerAbrStreamingUrl,
-		hlsManifestUrl: videoInfo.streaming_data?.hls_manifest_url ?? null,
+		hlsManifestUrl,
 		videoPlaybackUstreamerConfig,
 		durationMs: metadata.durationMs || null,
 		title: metadata.title || null,
