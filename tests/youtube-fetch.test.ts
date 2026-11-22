@@ -43,9 +43,42 @@ describe("youtubeFetch timeout", () => {
 		// @ts-expect-error Bun uses the query to isolate this module instance.
 		const { youtubeFetch } = await import("../src/youtube-fetch.ts?timeout-test");
 
-		await expect(youtubeFetch("https://www.youtube.com", undefined, 20)).rejects.toThrow();
+		await expect(youtubeFetch("https://jnn-pa.googleapis.com/x", undefined, 20)).rejects.toThrow(
+			"No answer from jnn-pa.googleapis.com within 1 s. The token container cannot reach it",
+		);
 		const init = fetcher.mock.calls[0]?.[1];
 		expect(init?.signal?.aborted).toBe(true);
+	});
+
+	it("names the host when the connection fails", async () => {
+		delete process.env.YOUTUBE_OUTBOUND_PROXY_URL;
+		globalThis.fetch = mock(async () => {
+			throw new Error("Unable to connect");
+		}) as unknown as typeof fetch;
+		// @ts-expect-error Bun uses the query to isolate this module instance.
+		const module = await import("../src/youtube-fetch.ts?connect-test");
+		const { youtubeFetch, YoutubeEgressError } = module;
+
+		const failure = youtubeFetch("https://www.youtube.com/generate_204");
+		await expect(failure).rejects.toThrow("Cannot reach www.youtube.com: Unable to connect.");
+		await expect(failure).rejects.toBeInstanceOf(YoutubeEgressError);
+	});
+
+	it("lets a caller abort through unchanged", async () => {
+		delete process.env.YOUTUBE_OUTBOUND_PROXY_URL;
+		globalThis.fetch = mock(
+			(_input: RequestInfo | URL, init?: RequestInit) =>
+				new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener("abort", () => reject(new Error("caller stopped")));
+				}),
+		) as unknown as typeof fetch;
+		// @ts-expect-error Bun uses the query to isolate this module instance.
+		const { youtubeFetch } = await import("../src/youtube-fetch.ts?caller-abort-test");
+		const controller = new AbortController();
+
+		const request = youtubeFetch("https://www.youtube.com", { signal: controller.signal });
+		controller.abort();
+		await expect(request).rejects.toThrow("caller stopped");
 	});
 
 	it("keeps the caller abort signal", async () => {
