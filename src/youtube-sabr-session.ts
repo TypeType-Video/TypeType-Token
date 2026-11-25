@@ -2,13 +2,14 @@ import { buildSabrFormat } from "googlevideo/utils";
 import { type IPlayerResponse, YTNodes } from "youtubei.js";
 import { KeyedSingleFlight } from "./keyed-single-flight.ts";
 import { type PlaybackTraceContext, playbackTraceEvent } from "./playback-diagnostics.ts";
-import { fetchPoToken } from "./token-service.ts";
+import { fetchPoToken, getOrRefreshSession } from "./token-service.ts";
 import { findYoutubeChannelAvatarUrl } from "./youtube-channel-avatar.ts";
 import {
 	cacheYoutubeChannelAvatar,
 	getCachedYoutubeChannelAvatar,
 } from "./youtube-channel-avatar-cache.ts";
 import { decipherHlsManifestUrl } from "./youtube-hls-manifest-url.ts";
+import { isIdentityRefusal, youtubeIdentityBudget } from "./youtube-identity-budget.ts";
 import {
 	getYoutubeInnertube,
 	isRejectedAnonymousSession,
@@ -63,8 +64,14 @@ async function loadYoutubeSabrSession(
 				reloadPlaybackParamsToken,
 			),
 		);
+		notePlayerCall(tokens.visitorData);
 		const playability = videoInfo.playability_status;
-		if (isRejectedAnonymousSession(playability?.status, playability?.reason)) {
+		const usedUp =
+			isIdentityRefusal(playability?.status, playability?.reason) &&
+			youtubeIdentityBudget.noteRefusal(tokens.visitorData, videoId);
+		if (usedUp || isRejectedAnonymousSession(playability?.status, playability?.reason)) {
+			if (usedUp) console.log(`[identity] renewing after refusals, videoId=${videoId}`);
+			youtubeIdentityBudget.forget(tokens.visitorData);
 			const refreshed = await perf.measure("identityRefresh", () =>
 				youtubeSabrIdentityRefresher.refresh(videoId, client, tokens.visitorData, innertube, trace),
 			);
@@ -78,6 +85,7 @@ async function loadYoutubeSabrSession(
 					reloadPlaybackParamsToken,
 				),
 			);
+			notePlayerCall(tokens.visitorData);
 		}
 		if (videoInfo.playability_status?.status !== "OK") {
 			throw new Error(
@@ -85,6 +93,7 @@ async function loadYoutubeSabrSession(
 			);
 		}
 
+		youtubeIdentityBudget.noteSuccess(tokens.visitorData);
 		const channelAvatarUrl = getCachedYoutubeChannelAvatar(videoId) ?? "";
 		if (!channelAvatarUrl) prefetchYoutubeChannelAvatar(videoId, innertube);
 		const session = await perf.measure("sessionBuild", () =>
@@ -95,6 +104,17 @@ async function loadYoutubeSabrSession(
 	} finally {
 		perf.log();
 	}
+}
+
+function notePlayerCall(visitorData: string): void {
+	if (!youtubeIdentityBudget.notePlayerCall(visitorData)) return;
+	void getOrRefreshSession(true)
+		.then((session) => {
+			if (session.visitorData === visitorData) return;
+			youtubeIdentityBudget.forget(visitorData);
+			console.log("[identity] renewed in the background before YouTube's hourly limit");
+		})
+		.catch(() => undefined);
 }
 
 async function fetchYoutubeResponses(
